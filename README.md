@@ -301,15 +301,43 @@ stock - ComfyUI decode:    min=+0.000000 max=+1.000000        77 levels
 Compare: max |diff| = 0.151855, PSNR 58.14 dB
 ```
 
-The heavier LTX-2.5 graphs in the same folder show the pack inside a real video pipeline, including
-the EXR sequence and the audio switch.
+### The full pipeline
 
-**What those graphs need from you.** The start image, same as above — `LoadImage` is stock, and stock
-means a filename that is not in your `input/` folder fails the whole prompt before anything runs, so
-copy the png across or point the node at your own. The audio is the opposite: the file named in
-`Load Audio (optional)` almost certainly does not exist on your machine, and that is fine. It becomes
-silence and says so in its report, and with `audio_source` on **generated** the wav is not read at
-all. Nothing to mute, nothing to delete.
+**[`example_workflows/LTX2.5_float32_EXR.json`](example_workflows/LTX2.5_float32_EXR.json)** — 64
+nodes, image to video on LTX-2.5, the whole thing wrapped in one subgraph so the controls sit on its
+face instead of somewhere inside. Start image in, and out the other end come a float32 EXR sequence,
+a video, and the range report for the decode that produced them.
+
+It wants these in your model folders:
+
+| slot | file |
+|---|---|
+| `UNETLoader` | `ltx-2.5-22b-distilled-transformer-comfy-int8-convrot` |
+| `VAELoader` ×2 | `ltx-2.5-video-vae-bf16`, `ltx-2.5-audio-vae-bf16` |
+| `CLIPLoader` ×2 | `gemma4-12b-with-proj-ltx-2.5-comfy-int8-convrot`, `gemma4_e2b_it_bf16` |
+| `LatentUpscaleModelLoader` | `ltx-2.5-latent-spatial-upscaler-x2-bf16-1.0` |
+
+The knobs that matter, all promoted onto the subgraph node:
+
+- **`precision`** `float32` and **`keep_out_of_range`** on — the two the pack exists for. Flip either
+  back to reproduce stock ComfyUI exactly.
+- **`audio_source`** — `generated` lets the model write the audio, `external` takes the file in
+  `audio_file`. One toggle; nothing needs muting either way.
+- **`filename_prefix`** and **`exr_half_float`** — where the sequence lands and whether it is 32f
+  or 16f. 121 frames of 1280×704 float32 EXR is about 1.2 GB, so give it a folder of its own.
+- Resolution comes from the **`ResolutionSelector`** outside the subgraph, in megapixels: 0.9 gives
+  1280×704, 2.1 gives 1920×1088. Editing the width and height fields does nothing, they are driven.
+- Inside, `VAEDecodeFloat32` is tiled at `tile_size 384` with `temporal_size 4096`. Leave it there
+  unless you have read the tiling table above.
+
+**What it needs from you.** The start image: `LoadImage` is stock, and stock means a filename that is
+not in your `input/` folder fails the whole prompt before anything runs, so copy the png across or
+point the node at your own. The audio is the opposite — `your_take.wav` is not on your disk and does
+not need to be. `Load Audio (optional)` turns a missing file into silence and says so in its report,
+and on `generated` the file is not read at all.
+
+Both examples also ship flattened for the `/prompt` endpoint, for driving them from a script:
+`01_measure_your_vae_API.json` and `LTX2.5_float32_API.json`.
 
 ## Install
 
