@@ -1,6 +1,12 @@
 # Changelog
 
-## 1.2.0 - the one to install
+## 1.2.1 - the one to install
+
+No code change. Drops the `Banner` key from `pyproject.toml`: the Registry accepts it and then never
+renders it, so leaving it in only suggests an artwork slot that does not exist. This is also the first
+version whose number matches a git tag and a GitHub release, which 1.0.0 through 1.2.0 did not.
+
+## 1.2.0
 
 Same pack as 1.0.0 below, renumbered because the Registry already had a 1.1.0 from earlier the same
 day, before the docs were audited and the figures were rebuilt. Registry version numbers cannot be
