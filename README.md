@@ -341,8 +341,8 @@ Redistributing the code is where the licence asks something back. Section 4(d) r
 keeps the authorship visible. Every source file carries an SPDX header saying the same thing, because
 files get copied one at a time.
 
-Releases up to and including 1.1.0 were published under MIT; anyone who took them keeps those terms
-for those versions.
+Commits made before the first release carried an MIT header; the release and everything after it are
+Apache-2.0.
 
 ## Screens
 
