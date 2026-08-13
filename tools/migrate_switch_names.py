@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 Andrei Orehov / Andromediastudio - https://andromediastudio.com
+# comfyui-vae-float32 - https://github.com/AndreiOrehov/comfyui-vae-float32
 """Rename Audio Latent Switch inputs in saved workflows (1.0 -> 1.1).
 
 The node's inputs were renamed so the promoted widget reads as something other

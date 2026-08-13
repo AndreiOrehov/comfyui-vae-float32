@@ -2,6 +2,15 @@
 
 ## 1.1.0 - naming, and what tiling actually costs
 
+### Licence: MIT -> Apache-2.0
+
+Same freedoms, one addition: section 4(d) requires the new [NOTICE](NOTICE) file to travel with any
+copy or derivative, so redistributing the pack keeps the authorship visible. Using the nodes in your
+own work still costs nothing and requires no credit. Every source file also carries an SPDX header
+now, because files get copied one at a time and LICENSE does not follow them.
+
+Releases up to and including the MIT-licensed 1.0.0 keep those terms for anyone who already took them.
+
 ### Breaking: Audio Latent Switch inputs renamed
 
 Promoted onto a subgraph, `prefer_external: fallback | external` says nothing — the label lands in a

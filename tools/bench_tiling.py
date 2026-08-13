@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 Andrei Orehov / Andromediastudio - https://andromediastudio.com
+# comfyui-vae-float32 - https://github.com/AndreiOrehov/comfyui-vae-float32
 """Measure decode wall-clock for tile_size x precision on the LTX-2.5 video VAE.
 
 Why an empty latent: decode cost is data-independent (same convolutions, same

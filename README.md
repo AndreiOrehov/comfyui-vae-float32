@@ -10,9 +10,9 @@
 
 **By [Andromediastudio](https://andromediastudio.com/).**
 
-![License: MIT](https://img.shields.io/badge/License-MIT-FFD27D.svg)
+![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-FFD27D.svg)
 ![ComfyUI](https://img.shields.io/badge/ComfyUI-custom_nodes-5BAEE3.svg)
-![Nodes](https://img.shields.io/badge/8_nodes-decode_·_measure_·_EXR-9aa3b2.svg)
+![Nodes](https://img.shields.io/badge/9_nodes-decode_·_measure_·_EXR-9aa3b2.svg)
 ![Verified on](https://img.shields.io/badge/verified_on-11_VAEs-3fb950.svg)
 
 </div>
@@ -329,9 +329,20 @@ are public API. A ComfyUI refactor can break it. The `-1/0/1` probe and the guar
 so that a surprise degrades into "no change, with a note in the report" rather than a corrupted image,
 but if something looks wrong, compare against stock with **Image Compare (numeric)** first.
 
-## Licence
+## Licence and credit
 
-MIT.
+**Apache-2.0** (see [LICENSE](LICENSE)), copyright 2026 Andrei Orehov / Andromediastudio.
+
+Use the nodes in whatever you like, commercial work included, and owe nothing for it. Credit is
+welcome but not required: *VAE float32 nodes by Andrei Orehov (Andromediastudio)*.
+
+Redistributing the code is where the licence asks something back. Section 4(d) requires the
+[NOTICE](NOTICE) file to travel with any copy or derivative, so a fork, a repackaged pack or a bundle
+keeps the authorship visible. Every source file carries an SPDX header saying the same thing, because
+files get copied one at a time.
+
+Releases up to and including 1.1.0 were published under MIT; anyone who took them keeps those terms
+for those versions.
 
 ## Screens
 

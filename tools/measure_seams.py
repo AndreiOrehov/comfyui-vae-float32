@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 Andrei Orehov / Andromediastudio - https://andromediastudio.com
+# comfyui-vae-float32 - https://github.com/AndreiOrehov/comfyui-vae-float32
 """Per-frame sharpness across an EXR sequence, to find tiling seams offline.
 
 The node does this inside a graph; this is the same measurement for a folder you

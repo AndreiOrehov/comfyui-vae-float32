@@ -1,0 +1,18 @@
+comfyui-vae-float32
+Copyright 2026 Andrei Orehov / Andromediastudio
+
+Author:     Andrei Orehov
+Studio:     Andromediastudio - https://andromediastudio.com
+Source:     https://github.com/AndreiOrehov/comfyui-vae-float32
+
+Licensed under the Apache License, Version 2.0 (see LICENSE).
+
+Section 4(d) of that licence requires this NOTICE to travel with the work: if you
+redistribute this pack, fork it, or ship a derivative of it, keep this file with
+the credit above intact.
+
+Using the nodes in your own renders, pipelines or products requires nothing from
+you. Credit is welcome, not owed:
+
+    VAE float32 nodes by Andrei Orehov (Andromediastudio)
+    https://github.com/AndreiOrehov/comfyui-vae-float32

@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 Andrei Orehov / Andromediastudio - https://andromediastudio.com
+# comfyui-vae-float32 - https://github.com/AndreiOrehov/comfyui-vae-float32
 """Measure what a VAE decode loses, straight against ComfyUI's own code.
 
 Loads a VAE outside the server, decodes the same latent twice - once the way
