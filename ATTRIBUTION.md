@@ -1,5 +1,7 @@
 # Attribution
 
+By [Andromediastudio](https://andromediastudio.com/).
+
 ## What this pack builds on
 
 **ComfyUI** (Comfy-Org, GPL-3.0) — the nodes reach into `comfy.sd.VAE`: `process_output`, `vae_dtype`
@@ -34,3 +36,4 @@ explains the disabled EXR codec.
 Every number in the README and CHANGELOG was measured on one machine — RTX 5090, ComfyUI 0.32.0,
 Windows, PyTorch 2.12.1+cu130 — with the scripts in `tools/`. Timings are hardware-specific; the level
 counts and value ranges are properties of the decode path and should reproduce anywhere.
+

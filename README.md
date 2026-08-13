@@ -8,6 +8,8 @@
 <br>
 **This pack gives them back - and gives you the measurements to check that on your own models.**
 
+**By [Andromediastudio](https://andromediastudio.com/).**
+
 ![License: MIT](https://img.shields.io/badge/License-MIT-FFD27D.svg)
 ![ComfyUI](https://img.shields.io/badge/ComfyUI-custom_nodes-5BAEE3.svg)
 ![Nodes](https://img.shields.io/badge/8_nodes-decode_·_measure_·_EXR-9aa3b2.svg)
@@ -157,6 +159,25 @@ it costs nothing: gradient excess at the spatial tile boundaries measures 1.03�
 60 s, because the spatial tile was the real constraint.
 
 ---
+
+## Start here
+
+**[`example_workflows/01_measure_your_vae.json`](example_workflows/01_measure_your_vae.json)** —
+drop it in, point `VAELoader` at any VAE you already have, hit Run. It round-trips one image through
+that VAE and decodes the latent twice, stock and float32, side by side:
+
+```
+LoadImage ─► VAE Encode (float32) ─┬─► VAE Decode (float32, no clamp) ─┬─► Image Range Stats
+                                   │                                   ├─► Save EXR (float32)
+                                   │                                   └─► Image Compare ◄─┐
+                                   └─► VAEDecode (stock ComfyUI) ─────────► Image Range Stats
+```
+
+The two Range Stats readouts are the whole point: same latent, same VAE, and one of them has a few
+hundred thousand more levels than the other. No LTX, no video model, nothing to download.
+
+The heavier LTX-2.5 graphs in the same folder show the pack inside a real video pipeline, including
+the EXR sequence and the audio switch.
 
 ## Install
 

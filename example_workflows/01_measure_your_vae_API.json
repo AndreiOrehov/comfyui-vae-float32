@@ -1,0 +1,117 @@
+{
+ "1": {
+  "class_type": "LoadImage",
+  "inputs": {
+   "image": "example.png",
+   "upload": "image"
+  }
+ },
+ "2": {
+  "class_type": "VAELoader",
+  "inputs": {
+   "vae_name": "vae-name-here.safetensors"
+  }
+ },
+ "3": {
+  "class_type": "VAEEncodeFloat32",
+  "inputs": {
+   "precision": "float32",
+   "pixels": [
+    "1",
+    0
+   ],
+   "vae": [
+    "2",
+    0
+   ]
+  }
+ },
+ "4": {
+  "class_type": "VAEDecodeFloat32",
+  "inputs": {
+   "keep_out_of_range": true,
+   "precision": "float32",
+   "tiled": false,
+   "tile_size": 384,
+   "overlap": 64,
+   "temporal_size": 4096,
+   "temporal_overlap": 8,
+   "samples": [
+    "3",
+    0
+   ],
+   "vae": [
+    "2",
+    0
+   ]
+  }
+ },
+ "5": {
+  "class_type": "VAEDecode",
+  "inputs": {
+   "samples": [
+    "3",
+    0
+   ],
+   "vae": [
+    "2",
+    0
+   ]
+  }
+ },
+ "6": {
+  "class_type": "ImageRangeStats",
+  "inputs": {
+   "label": "ours - float32, no clamp",
+   "image": [
+    "4",
+    0
+   ]
+  }
+ },
+ "7": {
+  "class_type": "ImageRangeStats",
+  "inputs": {
+   "label": "stock ComfyUI decode",
+   "image": [
+    "5",
+    0
+   ]
+  }
+ },
+ "8": {
+  "class_type": "ImageCompareNumeric",
+  "inputs": {
+   "amplify": 20.0,
+   "image_a": [
+    "4",
+    0
+   ],
+   "image_b": [
+    "5",
+    0
+   ]
+  }
+ },
+ "9": {
+  "class_type": "PreviewImage",
+  "inputs": {
+   "images": [
+    "8",
+    0
+   ]
+  }
+ },
+ "10": {
+  "class_type": "SaveEXRFloat32",
+  "inputs": {
+   "filename_prefix": "float32_test/frame",
+   "half_float": false,
+   "output_folder": "",
+   "images": [
+    "4",
+    0
+   ]
+  }
+ }
+}
