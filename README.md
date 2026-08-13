@@ -166,12 +166,9 @@ it costs nothing: gradient excess at the spatial tile boundaries measures 1.03�
 drop it in, point `VAELoader` at any VAE you already have, hit Run. It round-trips one image through
 that VAE and decodes the latent twice, stock and float32, side by side:
 
-```
-LoadImage ─► VAE Encode (float32) ─┬─► VAE Decode (float32, no clamp) ─┬─► Image Range Stats
-                                   │                                   ├─► Save EXR (float32)
-                                   │                                   └─► Image Compare ◄─┐
-                                   └─► VAEDecode (stock ComfyUI) ─────────► Image Range Stats
-```
+<div align="center">
+<img src="docs/assets/example_workflow.png" width="880" alt="The starter workflow: round-trip through your VAE, decode both ways, read the numbers">
+</div>
 
 The two Range Stats readouts are the whole point: same latent, same VAE, and one of them has a few
 hundred thousand more levels than the other. No LTX, no video model, nothing to download.
