@@ -360,8 +360,8 @@ point the node at your own. The audio is the opposite — `your_take.wav` is not
 not need to be. `Load Audio (optional)` turns a missing file into silence and says so in its report,
 and on `generated` the file is not read at all.
 
-Both examples also ship flattened for the `/prompt` endpoint, for driving them from a script:
-`01_measure_your_vae_API.json` and `LTX2.5_float32_API.json`.
+`01_measure_your_vae_API.json` is the same starter graph flattened for the `/prompt` endpoint, for
+driving it from a script.
 
 ## Install
 
