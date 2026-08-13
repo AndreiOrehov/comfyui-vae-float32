@@ -82,6 +82,18 @@ untested — reports welcome.
 ### What that actually looks like
 
 <div align="center">
+<img src="docs/assets/decode_compared.png" width="880" alt="One frame decoded both ways: crops, clamp map, difference histogram and a scanline">
+</div>
+
+One frame, one latent, decoded twice. The two crops are the same patch of sky: they look identical,
+and the level counts under them are the difference — **77** values against **66 846** in the same
+band. Bottom left is what the clamp deletes, bottom middle is how far the two decodes disagree, and
+bottom right is one scanline zoomed until the quantisation shows: the orange staircase is bfloat16
+stepping in units of 1/1024, the blue line is the same pixels in float32. Every number on that plate
+is computed by [`tools/make_decode_figure.py`](tools/make_decode_figure.py) from the EXR it renders,
+so it cannot drift away from the data.
+
+<div align="center">
 <img src="docs/assets/clamp_proof_city.jpg" width="880" alt="One frame decoded twice: stock, float32, and the amplified difference">
 </div>
 
@@ -98,6 +110,18 @@ sources, which are the highlights the clamp cut off.
 The same test on a neon plate, at ×100 because this frame disagrees twice as hard. Here the
 disagreement sits on the light bars themselves. Neither picture is retouched: both come out of one
 run, one latent, and the only difference is the decode path.
+
+### What these plates get put through
+
+![one frame, two grades](docs/assets/grade_examples_row.jpg)
+
+The same LTX-2.5 frame under two heavy grades — the sort of push a plate takes when it has to match
+footage shot on a camera. Every one of those moves spends the levels the decode handed over, which is
+what the headroom is for.
+
+*(Those three are ordinary 8-bit exports: they show how far the material gets pushed, not what this
+pack adds. The evidence for that is [further up](#what-that-actually-looks-like). Same three
+[stacked vertically](docs/assets/grade_examples_column.jpg), if that reads better.)*
 
 ---
 
@@ -399,22 +423,3 @@ files get copied one at a time.
 
 Commits made before the first release carried an MIT header; the release and everything after it are
 Apache-2.0.
-
-## Screens
-
-![stock vs float32](docs/assets/stock_vs_float32.png)
-
-Both halves come from one latent in a single run: the only difference is the decode path.
-
-### What these plates get put through
-
-![one frame, two grades](docs/assets/grade_examples_row.jpg)
-
-The same LTX-2.5 frame under two heavy grades — the sort of push a plate takes when it has to match
-footage shot on a camera. Every one of those moves spends the levels the decode handed over, which is
-what the headroom is for.
-
-*(Those three are ordinary 8-bit exports: they show how far the material gets pushed, not what this
-pack adds. The evidence for that is [further up](#what-that-actually-looks-like). Same three
-[stacked vertically](docs/assets/grade_examples_column.jpg), if that reads better.)*
-
