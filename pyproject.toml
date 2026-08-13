@@ -1,6 +1,6 @@
 [project]
 name = "comfyui-vae-float32"
-description = "Honest float32 out of any ComfyUI VAE. Decode without the [0,1] clamp and in float32 instead of bfloat16, measure what the stock path throws away, catch tiling artefacts, and write real float32 EXR. By Andromediastudio (andromediastudio.com). Eight nodes: VAE Decode (float32, no clamp), VAE Encode (float32), Image Range Stats, Image Compare (numeric), Tile Seam Check, Remap Range, Save EXR (float32)."
+description = "Honest float32 out of any ComfyUI VAE. Decode without the [0,1] clamp and in float32 instead of bfloat16, measure what the stock path throws away, catch tiling artefacts, and write real float32 EXR. By Andromediastudio (andromediastudio.com). Eight nodes: VAE Decode (float32, no clamp), VAE Encode (float32), Image Range Stats, Image Compare (numeric), Tile Seam Check, Remap Range, Save EXR (float32), Latent Switch (optional input)."
 version = "1.0.0"
 license = { text = "MIT License" }
 requires-python = ">=3.9"
@@ -21,4 +21,5 @@ PublisherId = "andreiorehov"
 DisplayName = "comfyui-vae-float32"
 Icon = "https://raw.githubusercontent.com/AndreiOrehov/comfyui-vae-float32/main/docs/assets/registry_icon.png"
 includes = []
+
 
