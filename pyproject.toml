@@ -21,6 +21,7 @@ Repository = "https://github.com/AndreiOrehov/comfyui-vae-float32"
 PublisherId = "andreiorehov"
 DisplayName = "comfyui-vae-float32"
 Icon = "https://raw.githubusercontent.com/AndreiOrehov/comfyui-vae-float32/main/docs/assets/registry_icon.png"
+Banner = "https://raw.githubusercontent.com/AndreiOrehov/comfyui-vae-float32/main/docs/assets/registry_banner.png"
 includes = []
 
 
