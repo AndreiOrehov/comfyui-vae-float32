@@ -39,7 +39,7 @@
     "Node name for S&R": "LoadImage"
    },
    "widgets_values": [
-    "example.png",
+    "neon_cyborg_portrait.png",
     "image"
    ]
   },
@@ -74,7 +74,7 @@
     "Node name for S&R": "VAELoader"
    },
    "widgets_values": [
-    "vae-name-here.safetensors"
+    "qwen_image_vae.safetensors"
    ]
   },
   {

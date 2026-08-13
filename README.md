@@ -176,6 +176,16 @@ LoadImage ─► VAE Encode (float32) ─┬─► VAE Decode (float32, no clamp
 The two Range Stats readouts are the whole point: same latent, same VAE, and one of them has a few
 hundred thousand more levels than the other. No LTX, no video model, nothing to download.
 
+Copy `example_workflows/neon_cyborg_portrait.png` into your `ComfyUI/input/` folder first, or point
+`LoadImage` at anything you already have; the shipped `VAELoader` value is `qwen_image_vae.safetensors`,
+swap it for a VAE you own. Verified run, exactly as the file ships:
+
+```
+ours  - float32, no clamp: min=-0.019557 max=+1.018609   506 744 levels in [0.2,0.3]
+stock - ComfyUI decode:    min=+0.000000 max=+1.000000        77 levels
+Compare: max |diff| = 0.151855, PSNR 58.14 dB
+```
+
 The heavier LTX-2.5 graphs in the same folder show the pack inside a real video pipeline, including
 the EXR sequence and the audio switch.
 

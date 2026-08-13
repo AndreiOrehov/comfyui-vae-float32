@@ -2,14 +2,14 @@
  "1": {
   "class_type": "LoadImage",
   "inputs": {
-   "image": "example.png",
+   "image": "neon_cyborg_portrait.png",
    "upload": "image"
   }
  },
  "2": {
   "class_type": "VAELoader",
   "inputs": {
-   "vae_name": "vae-name-here.safetensors"
+   "vae_name": "qwen_image_vae.safetensors"
   }
  },
  "3": {
