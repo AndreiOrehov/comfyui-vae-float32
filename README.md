@@ -39,7 +39,7 @@ hidden stop of dynamic range, but the part a grade reaches for first.
 <img src="docs/assets/clamp_range.png" width="880" alt="Decoded value range per VAE against the [0,1] clamp bounds">
 </div>
 
-Red is above 1.0, blue is below 0.0, on one frame of a real generation:
+On one frame of a real generation, red is what sits above 1.0 and blue what sits below 0.0:
 
 <div align="center">
 <img src="docs/assets/clamp_map.png" width="880" alt="Map of out-of-range pixels on a decoded frame">
