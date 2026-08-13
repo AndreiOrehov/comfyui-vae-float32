@@ -36,6 +36,10 @@ _IDENTITY = lambda image: image                        # noqa: E731
 
 _SLOT = "  "
 
+# Tells "input not connected" apart from "connected but not evaluated yet", which a lazy
+# input reports as None. Same trick the core's Soft Switch uses.
+_MISSING = object()
+
 
 # --------------------------------------------------------------------------- helpers
 
@@ -130,7 +134,7 @@ class VAEDecodeFloat32:
                 "precision": (["vae default", "float32"], {
                     "default": "float32",
                     "tooltip": "Most VAEs run in bfloat16, which quantises the output to roughly 10 "
-                               "bits. float32 costs ~2.7x decode time and 2x VAE VRAM."}),
+                               "bits. float32 costs ~3x decode time and 2x VAE VRAM."}),
                 "tiled": ("BOOLEAN", {
                     "default": False,
                     "tooltip": "Tiled decoding, for frame counts / resolutions that will not fit."}),
@@ -631,15 +635,21 @@ class AudioLatentSwitch:
     def INPUT_TYPES(s):
         return {
             "required": {
-                "generated": ("LATENT", {
-                    "tooltip": "The fallback, used whenever 'external' is absent."}),
-                "prefer_external": ("BOOLEAN", {
-                    "default": True, "label_on": "external", "label_off": "fallback",
-                    "tooltip": "Only matters when an external latent is connected."}),
+                "audio_source": ("BOOLEAN", {
+                    "default": True, "label_on": "external", "label_off": "generated",
+                    "tooltip": "Which branch wins when both are connected. Switching is enough — "
+                               "there is no need to mute anything. If only one branch is connected, "
+                               "that one is used whatever this says."}),
             },
             "optional": {
-                "external": ("LATENT", {
-                    "tooltip": "Leave unconnected (or mute its chain) to always use the fallback."}),
+                "generated_audio": ("LATENT", {
+                    "lazy": True,
+                    "tooltip": "The latent the model makes on its own — an empty audio latent for "
+                               "LTX."}),
+                "external_audio": ("LATENT", {
+                    "lazy": True,
+                    "tooltip": "Your own audio, encoded to a latent. Mute or delete its chain and "
+                               "this input simply disappears."}),
             },
         }
 
@@ -648,19 +658,136 @@ class AudioLatentSwitch:
     FUNCTION = "pick"
     CATEGORY = "vae_float32"
 
-    def pick(self, generated, prefer_external, external=None):
-        if external is not None and prefer_external:
-            mode, out = "external", external
+    def check_lazy_status(self, audio_source, generated_audio=_MISSING, external_audio=_MISSING):
+        """Ask for one branch only, so the other is never computed.
+
+        A lazy input arrives as None while it is connected but unevaluated, which is
+        why absent inputs default to _MISSING here rather than None - otherwise the
+        two cases are indistinguishable.
+        """
+        wanted, other = (("external_audio", "generated_audio") if audio_source
+                         else ("generated_audio", "external_audio"))
+        values = {"generated_audio": generated_audio, "external_audio": external_audio}
+        if values[wanted] is _MISSING:              # the preferred branch is not wired at all
+            return [other] if values[other] is None else []
+        return [wanted] if values[wanted] is None else []
+
+    def pick(self, audio_source, generated_audio=_MISSING, external_audio=_MISSING):
+        # Both branches optional on purpose: either can be muted, bypassed or deleted and the
+        # survivor is used. Requiring one of them made disabling THAT side fail with ComfyUI's
+        # "missing a required input", which reads like a broken node rather than a muted branch.
+        wanted, other = (("external", "generated") if audio_source else ("generated", "external"))
+        values = {"generated": generated_audio, "external": external_audio}
+        got = {k: v for k, v in values.items() if v is not _MISSING and v is not None}
+
+        if wanted in got:
+            mode, out = wanted, got[wanted]
+        elif other in got:
+            mode, out = f"{other} ({wanted} not connected)", got[other]
         else:
-            mode = ("fallback (nothing connected)" if external is None
-                    else "fallback (prefer_external off)")
-            out = generated
+            raise RuntimeError(
+                "Audio Latent Switch: neither generated_audio nor external_audio is connected. "
+                "Connect one of them, or un-mute the branch you meant to use.")
+
         logger.info("[vae_float32] latent switch: %s", mode)
         return (out, mode)
 
 
+class LoadAudioOptional:
+    """Load Audio that treats a missing file as silence instead of killing the prompt.
+
+    ComfyUI validates every node in a prompt before any of it runs, and the stock
+    LoadAudio rejects a filename that is not in the input folder. So a graph that
+    merely CONTAINS an audio branch cannot run without the file - even when a
+    switch downstream was never going to use it, and even when the branch is lazy
+    (measured: a lazy input still fails validation). That is what forces the
+    mute-the-whole-chain ritual, and why one un-muted node in the chain breaks it.
+
+    The fix is to own the validation. VALIDATE_INPUTS taking `audio_file` makes
+    ComfyUI skip its own combo check for that widget (execution.py:1019), so an
+    unknown filename passes, reaches execute(), and turns into silence plus a line
+    in the report. The branch then costs nothing and breaks nothing when unused.
+    """
+
+    NONE = "(none - silence)"
+
+    @classmethod
+    def INPUT_TYPES(s):
+        try:
+            files = folder_paths.filter_files_content_types(
+                os.listdir(folder_paths.get_input_directory()), ["audio", "video"])
+        except Exception:
+            files = []
+        return {
+            "required": {
+                "audio_file": ([s.NONE] + sorted(files), {
+                    "tooltip": "A file from the input folder. A name that does not exist here - on "
+                               "another machine, say - yields silence and a note, not an error."}),
+                "silence_seconds": ("FLOAT", {
+                    "default": 5.0, "min": 0.1, "max": 3600.0, "step": 0.1,
+                    "tooltip": "Length of the silence used when there is no file."}),
+                "sample_rate": ("INT", {"default": 48000, "min": 8000, "max": 192000, "step": 1000}),
+            },
+            "optional": {
+                "path_override": ("STRING", {
+                    "default": "",
+                    "tooltip": "Absolute path, for audio that lives outside the input folder. "
+                               "Wins over audio_file when set."}),
+            },
+        }
+
+    RETURN_TYPES = ("AUDIO", "STRING")
+    RETURN_NAMES = ("audio", "report")
+    FUNCTION = "load"
+    CATEGORY = "vae_float32"
+
+    @classmethod
+    def VALIDATE_INPUTS(cls, audio_file):
+        # Deliberately permissive - see the class docstring. Naming the widget here is
+        # what makes ComfyUI hand its combo check over to us.
+        return True
+
+    def _silence(self, seconds, sample_rate):
+        n = max(1, int(round(seconds * sample_rate)))
+        return {"waveform": torch.zeros(1, 2, n), "sample_rate": int(sample_rate)}
+
+    def load(self, audio_file, silence_seconds, sample_rate, path_override=""):
+        wanted = path_override.strip() or ("" if audio_file == self.NONE else audio_file)
+        if not wanted:
+            report = f"no file selected - {silence_seconds:g}s of silence at {sample_rate} Hz"
+            logger.info("[vae_float32] %s", report)
+            return (self._silence(silence_seconds, sample_rate), report)
+
+        path = wanted
+        if not os.path.isabs(path):
+            try:
+                path = folder_paths.get_annotated_filepath(wanted)
+            except Exception:
+                path = os.path.join(folder_paths.get_input_directory(), wanted)
+
+        if not os.path.exists(path):
+            report = (f"'{wanted}' not found - {silence_seconds:g}s of silence instead. "
+                      f"Nothing failed; pick a file, or leave it if this branch is unused.")
+            logger.warning("[vae_float32] %s", report)
+            return (self._silence(silence_seconds, sample_rate), report)
+
+        try:
+            from comfy_extras.nodes_audio import load as _load     # same decoder as stock LoadAudio
+            waveform, sr = _load(path)
+        except Exception as e:
+            report = f"could not decode '{wanted}' ({type(e).__name__}: {e}) - using silence"
+            logger.warning("[vae_float32] %s", report)
+            return (self._silence(silence_seconds, sample_rate), report)
+
+        secs = waveform.shape[-1] / float(sr)
+        report = f"loaded '{os.path.basename(path)}': {secs:.2f}s, {sr} Hz, {waveform.shape[0]}ch"
+        logger.info("[vae_float32] %s", report)
+        return ({"waveform": waveform.unsqueeze(0), "sample_rate": sr}, report)
+
+
 NODE_CLASS_MAPPINGS = {
     "VAEDecodeFloat32": VAEDecodeFloat32,
+    "LoadAudioOptional": LoadAudioOptional,
     "AudioLatentSwitch": AudioLatentSwitch,
     "VAEEncodeFloat32": VAEEncodeFloat32,
     "ImageRangeStats": ImageRangeStats,
@@ -672,7 +799,8 @@ NODE_CLASS_MAPPINGS = {
 
 NODE_DISPLAY_NAME_MAPPINGS = {
     "VAEDecodeFloat32": "VAE Decode (float32, no clamp)",
-    "AudioLatentSwitch": "Latent Switch (optional input)",
+    "AudioLatentSwitch": "Audio Latent Switch (generated / external)",
+    "LoadAudioOptional": "Load Audio (optional)",
     "VAEEncodeFloat32": "VAE Encode (float32)",
     "ImageRangeStats": "Image Range Stats",
     "ImageCompareNumeric": "Image Compare (numeric)",

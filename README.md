@@ -150,13 +150,47 @@ than trusting the writer.
 > If your pack does that, it is worth checking — this one bit ComfyUI-OCIO too
 > ([fix](https://github.com/SlavaSexton/ComfyUI-OCIO/pull/5)).
 
-### Latent Switch (optional input)
+### Load Audio (optional)
 
-Feeds a fallback latent when an optional one is absent. Written for LTX's audio branch, where
-`LTXVConcatAVLatent` requires an audio latent — muting the `LoadAudio → encode` chain breaks the graph,
-and a plain boolean switch does not help either, because ComfyUI validates every node in the prompt
-before execution: a missing wav still kills the run through `dependent_outputs`. An **optional** input
-solves it properly — mute the chain and there is nothing left to validate.
+Stock `LoadAudio` refuses a filename that is not in the input folder, and ComfyUI validates **every**
+node in a prompt before any of it runs. So a graph that merely *contains* an audio branch cannot run
+without that file — even when a switch downstream was never going to use it. Marking the input lazy
+does not help either; measured on 0.32.0, a lazy branch is still validated:
+
+```
+{"switch": false, "on_true": [LoadAudio "no_such_file.wav"], ...}
+  -> HTTP 400  Prompt outputs failed validation
+     audio - Invalid audio file: no_such_file.wav
+```
+
+That single behaviour is what forces the mute-the-whole-chain ritual, and why forgetting one node in
+the chain breaks the run. This node owns its validation instead: an unknown file becomes
+`silence_seconds` of silence and a line in the `report` output. Same file picker, same decoder as
+stock (`comfy_extras.nodes_audio.load`), plus `path_override` for audio outside the input folder.
+
+```
+loaded 'riff_meat_5s.wav': 5.00s, 48000 Hz, 2ch
+'no_such_file.wav' not found - 5s of silence instead. Nothing failed; ...
+```
+
+### Audio Latent Switch (generated / external)
+
+`generated_audio`, `external_audio`, and one `audio_source` toggle reading **generated | external**.
+That toggle is the whole mechanic — nothing needs muting, deleting or re-wiring to change your mind.
+
+| state | result |
+|---|---|
+| both connected | `audio_source` decides, and **only that branch is computed** |
+| one branch muted, bypassed or deleted | the survivor is used, whatever the toggle says |
+| neither connected | a plain sentence naming both inputs, not `missing a required input` |
+
+Both latent inputs are optional *and* lazy. Optional, so disabling either side is legal — 1.0.0
+required `generated`, so turning *that* side off failed in a way that read like a broken node. Lazy,
+so the branch you did not pick is never executed: with `audio_source` on `generated`, the wav is not
+even decoded.
+
+Written for LTX's audio branch, where `LTXVConcatAVLatent` demands an audio latent, but it works
+anywhere an input is mandatory and you want it to be skippable.
 
 ---
 
@@ -174,8 +208,45 @@ The 24-frame period is arithmetic: `tile_t = 32/8 = 4` latent frames, `overlap_t
 `3` latent = 24 pixel frames. Cutting the **spatial** tile is what actually solves the memory wall, and
 it costs nothing: gradient excess at the spatial tile boundaries measures 1.03–1.05×, i.e. no seam.
 
-**float32 costs about 2.7× the decode time and 2× the VAE's VRAM.** On the clip above that was still
+**float32 costs about 3× the decode time and 2× the VAE's VRAM.** On the clip above that was still
 60 s, because the spatial tile was the real constraint.
+
+### tile_size is free in bf16 and a cliff in fp32
+
+Decode only, no sampler: an empty `1280×704×121` latent through the LTX-2.5 video VAE, `temporal_size
+4096`, `overlap 64`, RTX 5090 32 GB. Script: [`tools/bench_tiling.py`](tools/bench_tiling.py).
+
+| precision | tile_size | decode | |
+|---|---|---|---|
+| bf16 | 384 | 12.1 s | |
+| bf16 | 768 | 12.1 s | ComfyUI's official LTX-2.5 template |
+| float32 | 384 | 44.2 s | this pack's default |
+| float32 | 512 | 42.4 s | stock `VAEDecodeTiled` default |
+| float32 | 768 | **1247 s** | **28× slower** |
+
+In bf16 the tile size costs nothing — 384 and 768 are identical. In float32 it is a cliff: 384 and 512
+sit within noise of each other, and 768 no longer fits, so the loader starts paging weights and a
+12-second decode becomes 21 minutes. No error, no warning, just a progress bar that stops moving.
+
+**Resolution scales linearly; the tile is what sets the ceiling.** The same 121 frames at 1920×1088 in
+float32: **109.1 s** at `tile_size 384`, **100.8 s** at 512 — 2.32× the pixels of the runs above, ~2.4×
+the time, and VRAM never moved in either. The cliff did not move down with the bigger frame, and 512
+stays marginally faster than 384 at both resolutions (fewer tiles, less overlap recomputed). Cutting
+the tile buys headroom that the frame size then spends linearly, which is the whole reason to reach
+for `tile_size` rather than `temporal_size`. (768 at 1920×1088 was not measured — the 1280×704 run
+already took 21 minutes.)
+
+> `EmptyLTXVLatentVideo` and the LTX latent grid floor-divide by 32, so **1080 is not a valid height** —
+> it silently becomes 1056. Use 1088 (or 1056) and know which one you picked.
+
+**This is the trap worth knowing about.** ComfyUI's own template
+`video_ltx2_5_i2v.json` ships `VAEDecodeTiled` at **768 / 64 / 4096 / 32**, and that is a sensible
+choice — for bf16, where it is free. Swap in this pack's float32 decode, leave 768 in place, and the
+same graph takes twenty minutes. Halve the tile.
+
+(The template also sets `temporal_size` to 4096, i.e. temporal tiling effectively off — Comfy's own
+template agrees with the rule above, even though the node's default of 64 does not. At 64 the tile is
+8 latent frames with 1 of overlap, so a soft frame lands every 56 output frames.)
 
 ---
 
@@ -205,6 +276,13 @@ Compare: max |diff| = 0.151855, PSNR 58.14 dB
 The heavier LTX-2.5 graphs in the same folder show the pack inside a real video pipeline, including
 the EXR sequence and the audio switch.
 
+**What those graphs need from you.** The start image, same as above — `LoadImage` is stock, and stock
+means a filename that is not in your `input/` folder fails the whole prompt before anything runs, so
+copy the png across or point the node at your own. The audio is the opposite: the file named in
+`Load Audio (optional)` almost certainly does not exist on your machine, and that is fine. It becomes
+silence and says so in its report, and with `audio_source` on **generated** the wav is not read at
+all. Nothing to mute, nothing to delete.
+
 ## Install
 
 Clone into `ComfyUI/custom_nodes/` and restart. `pip install OpenEXR` if you want EXR output; the pack
@@ -215,6 +293,19 @@ falls back to 32-bit float TIFF otherwise.
 `OpenEXR>=3.3`, `tifffile`, `numpy`. Everything else comes with ComfyUI.
 
 ## Known rough edges
+
+**A measuring node that reports nothing probably never ran.** ComfyUI's selection toolbox — the strip
+that appears when you select nodes on the canvas — has a ▶ button, and it does not mean Run. It runs
+`Comfy.QueueSelectedOutputNodes`, which sends `partial_execution_targets`; the executor then keeps
+only those output nodes and drops every other one (`execution.py`, `partial_execution_list`).
+Measured here with `PreviewImage` selected: `outputs_to_execute` came back as `['9']`, and both
+`Image Range Stats` nodes and `Save EXR (float32)` never executed. The run still reported **success**,
+with no message saying anything had been skipped.
+
+A plain Run queues every output node — verified on the same install: `outputs_to_execute:
+['4','6','7','8']`, all four reported, and the EXR files landed. This is stock ComfyUI behaviour and
+a stock `SaveImage` is dropped exactly the same way, but from the outside it looks precisely like a
+broken node, so it is worth knowing before filing an issue.
 
 **MiniMax H3, once.** In one batch run the decode died with
 `ValueError: Buffer too small: needs 196608 bytes, but only has 102400`. That VAE is the only one
