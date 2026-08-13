@@ -13,7 +13,7 @@
 ![License: MIT](https://img.shields.io/badge/License-MIT-FFD27D.svg)
 ![ComfyUI](https://img.shields.io/badge/ComfyUI-custom_nodes-5BAEE3.svg)
 ![Nodes](https://img.shields.io/badge/8_nodes-decode_·_measure_·_EXR-9aa3b2.svg)
-![Verified on](https://img.shields.io/badge/verified_on-6_VAEs-3fb950.svg)
+![Verified on](https://img.shields.io/badge/verified_on-11_VAEs-3fb950.svg)
 
 </div>
 
@@ -51,14 +51,19 @@ scale. No float32 container recovers this after the fact; the precision has to e
 
 This is not LTX-specific. Same still, same probe, stock vs this pack:
 
-| VAE | stock | ours |
-|---|---|---|
-| `ltx-2.5-video-vae-bf16` | 77 | 3 354 786 |
-| `ae.safetensors` (Flux) | 77 | 223 109 |
-| `qwen_image_vae` | 77 | 214 995 |
-| `wan2.2_vae` | 77 | 212 585 |
-| `hunyuanvideo15_vae_fp16` | 614 | 213 523 |
-| `taeltx2_3` (TAEHV) | 77 | 229 150 |
+| VAE | stock | ours | note |
+|---|---|---|---|
+| `ltx-2.5-video-vae-bf16` | 77 | 3 354 786 | |
+| `ltx-2.5-video-vae-conv-bf16` | 77 | 211 974 | |
+| `LTX23_video_vae_bf16` | 77 | 211 974 | |
+| `ae.safetensors` (Flux) | 77 | 223 109 | |
+| `qwen_image_vae` | 77 | 214 995 | |
+| `wan2.2_vae` | 77 | 212 585 | |
+| `wan_2.1_vae` | 77 | 215 419 | |
+| `full_encoder_small_decoder` | 77 | 213 662 | |
+| `hunyuanvideo15_vae_fp16` | 614 | 213 523 | fp16 starts with more mantissa than bf16 |
+| `minimax_h3_video_vae_fp16` | 2 378 | 137 317 | identity `process_output`, nothing to unclamp |
+| `taeltx2_3` (TAEHV) | 77 | 229 150 | identity `process_output` |
 
 ---
 
@@ -195,6 +200,23 @@ falls back to 32-bit float TIFF otherwise.
 
 `OpenEXR>=3.3`, `tifffile`, `numpy`. Everything else comes with ComfyUI.
 
+## Known rough edges
+
+**MiniMax H3, once.** In one batch run the decode died with
+`ValueError: Buffer too small: needs 196608 bytes, but only has 102400`. That VAE is the only one
+tested here that uses ComfyUI's chunked-IO path with a pre-allocated output buffer
+(`comfy/sd.py:1201`), so the fp32 cast is the obvious suspect. It did not reproduce: three subsequent
+runs of the same graph, and separate runs at `vae default` and `float32`, all succeeded. Cause not
+established. If you hit it, `precision: vae default` avoids the cast entirely — and please open an
+issue with the model and frame count.
+
+**Timings are from one machine** (RTX 5090, Windows, ComfyUI 0.32.0, PyTorch 2.12.1+cu130). Level
+counts and value ranges are properties of the decode path and should reproduce anywhere; seconds are
+not.
+
+**Not yet tested:** Linux, macOS, ComfyUI versions other than 0.32.0, and a clean install where
+`OpenEXR` is not already present.
+
 ## A caveat worth stating
 
 This pack reaches into `vae.process_output`, `vae.vae_dtype` and `first_stage_model` — none of which
@@ -211,3 +233,4 @@ MIT.
 ![stock vs float32](docs/assets/stock_vs_float32.png)
 
 Both halves come from one latent in a single run: the only difference is the decode path.
+
