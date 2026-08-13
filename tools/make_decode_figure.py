@@ -43,7 +43,8 @@ def levels(a):
 
 def show(ax, img, title=None, sub=None):
     ax.imshow(np.clip(img, 0, 1))
-    ax.set_xticks([]); ax.set_yticks([])
+    ax.set_xticks([])
+    ax.set_yticks([])
     for s in ax.spines.values():
         s.set_color("#30363d")
     if title:
@@ -73,7 +74,8 @@ fig = plt.figure(figsize=(17.6, 10.4), dpi=100, facecolor=BG)
 fig.text(0.5, 0.962, "LTX-2.5 decode: stock ComfyUI vs float32 EXR  -  same latent, same frame",
          color=FG, fontsize=17, ha="center")
 
-ax = fig.add_axes([0.035, 0.545, 0.28, 0.34]); show(ax, f32)
+ax = fig.add_axes([0.035, 0.545, 0.28, 0.34])
+show(ax, f32)
 ax.set_title(f"{os.path.basename(args.source)}  (float32 EXR)", color=DIM, fontsize=11, pad=8)
 ax.add_patch(patches.Rectangle((px, py), P, P, fill=False, ec="#f5d90a", lw=2))
 
@@ -85,7 +87,8 @@ show(ax, cf, "ours  -  fp32, no clamp", f"{levels(cf):,} levels in [{LO},{HI}] h
 # --- what the clamp deletes
 vis = np.dstack([np.clip(lum, 0, 1) ** (1 / 2.2) * 0.30] * 3)
 over, under = (f32 > 1.0).any(2), (f32 < 0.0).any(2)
-vis[over] = (1.0, 0.25, 0.20); vis[under] = (0.25, 0.50, 1.00)
+vis[over] = (1.0, 0.25, 0.20)
+vis[under] = (0.25, 0.50, 1.00)
 ax = fig.add_axes([0.035, 0.115, 0.28, 0.34])
 show(ax, vis, "what the clamp deletes", "red  above 1.0        blue  below 0.0")
 
@@ -120,7 +123,8 @@ for s in ax.spines.values():
 ax.tick_params(colors=DIM, labelsize=9)
 leg = ax.legend(facecolor=BG, edgecolor="#30363d", fontsize=9, labelcolor=FG)
 
-pa = float(over.mean() * 100); pb = float(under.mean() * 100)
+pa = float(over.mean() * 100)
+pb = float(under.mean() * 100)
 fig.text(0.5, 0.045,
          f"stock: +0.0000 .. +1.0000        float32: {f32.min():+.4f} .. {f32.max():+.4f}"
          f"        outside the clamp: {pa:.3f}% above, {pb:.3f}% below"

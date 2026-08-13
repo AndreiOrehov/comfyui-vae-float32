@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.2.0 - the one to install
+
+Same pack as 1.0.0 below, renumbered because the Registry already had a 1.1.0 from earlier the same
+day, before the docs were audited and the figures were rebuilt. Registry version numbers cannot be
+withdrawn or reused, so the way to make the newest thing the newest number is to go past it. Install
+1.2.0; 1.0.0 and 1.1.0 are the same afternoon's work in progress.
+
 ## 1.0.0 - first release
 
 Nine nodes around one finding: ComfyUI's VAE decode clamps to `[0,1]` and runs in bfloat16, and
