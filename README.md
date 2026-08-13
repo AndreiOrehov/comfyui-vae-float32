@@ -42,7 +42,7 @@ hidden stop of dynamic range, but the part a grade reaches for first.
 On one frame of a real generation, red is what sits above 1.0 and blue what sits below 0.0:
 
 <div align="center">
-<img src="docs/assets/clamp_map.png" width="880" alt="Map of out-of-range pixels on a decoded frame">
+<img src="docs/assets/clamp_out_of_range.png" width="880" alt="Map of out-of-range pixels on a decoded frame">
 </div>
 
 ### 2. Most of the precision
