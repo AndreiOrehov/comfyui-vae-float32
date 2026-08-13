@@ -6,9 +6,8 @@ name: Publish to Comfy registry
 # the publish, and no API key is ever typed into a console or left in a shell history. The key lives
 # once, as the repository secret REGISTRY_ACCESS_TOKEN, and nothing here can read it back out.
 #
-# Authentication error => the secret is missing or was rotated; create it again at
-# Settings -> Secrets and variables -> Actions. Duplicate-version error => the version in
-# pyproject.toml is already published; bump it, the Registry will not take the same number twice.
+# Duplicate-version error => the version in pyproject.toml is already published; bump it, the Registry
+# will not take the same number twice.
 on:
   workflow_dispatch:
   push:
@@ -21,21 +20,24 @@ jobs:
   publish-node:
     name: Publish custom node to the registry
     runs-on: ubuntu-latest
+    # The secret is lifted into env because the `secrets` context is NOT available in a step-level
+    # `if` - referencing it there makes the whole workflow file invalid, which GitHub reports as a
+    # zero-second run and a "workflow file issue" with no further detail. `env` IS available in `if`.
+    env:
+      REGISTRY_TOKEN: ${{ secrets.REGISTRY_ACCESS_TOKEN }}
     steps:
       - name: Check out code
         uses: actions/checkout@v7
 
       # Without this guard an unset secret reaches the CLI as an empty string and the run fails on
       # "Option '--token' requires an argument" - a red cross that says nothing about the repository.
-      # Skip instead, so a version bump before the secret exists is a no-op rather than a failure.
       - name: No registry token configured
-        if: ${{ secrets.REGISTRY_ACCESS_TOKEN == '' }}
+        if: env.REGISTRY_TOKEN == ''
         run: |
-          echo "::notice title=Publish skipped::REGISTRY_ACCESS_TOKEN is not set. Add it under" \
-               "Settings -> Secrets and variables -> Actions, then re-run this workflow."
+          echo "::notice title=Publish skipped::REGISTRY_ACCESS_TOKEN is not set. Add it under Settings -> Secrets and variables -> Actions, then re-run this workflow."
 
       - name: Publish custom node
-        if: ${{ secrets.REGISTRY_ACCESS_TOKEN != '' }}
+        if: env.REGISTRY_TOKEN != ''
         uses: Comfy-Org/publish-node-action@main
         with:
           personal_access_token: ${{ secrets.REGISTRY_ACCESS_TOKEN }}
