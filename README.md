@@ -1,8 +1,19 @@
+<div align="center">
+
+<img src="docs/assets/cover.png" width="880" alt="comfyui-vae-float32 - distinct levels per frame, stock decode vs float32, across six VAEs">
+
 # comfyui-vae-float32
 
 **Every VAE decode in ComfyUI throws away two things, and neither is visible from inside a graph.**
+<br>
+**This pack gives them back - and gives you the measurements to check that on your own models.**
 
-This pack gives them back, and gives you the measurements to check that for yourself on your own models.
+![License: MIT](https://img.shields.io/badge/License-MIT-FFD27D.svg)
+![ComfyUI](https://img.shields.io/badge/ComfyUI-custom_nodes-5BAEE3.svg)
+![Nodes](https://img.shields.io/badge/8_nodes-decode_·_measure_·_EXR-9aa3b2.svg)
+![Verified on](https://img.shields.io/badge/verified_on-6_VAEs-3fb950.svg)
+
+</div>
 
 ---
 
@@ -19,6 +30,10 @@ process_output = lambda image: image.add_(1.0).div_(2.0).clamp_(0.0, 1.0)
 Decoders routinely emit values past those bounds. On a real LTX-2.5 generation the decode spans
 **−0.0715 … +1.0445**: specular highlights and shadow detail, deleted before any node downstream can
 see them.
+
+<div align="center">
+<img src="docs/assets/clamp_range.png" width="880" alt="Decoded value range per VAE against the [0,1] clamp bounds">
+</div>
 
 ### 2. Most of the precision
 
