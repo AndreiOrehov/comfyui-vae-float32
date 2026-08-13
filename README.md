@@ -197,7 +197,7 @@ the chain breaks the run. This node owns its validation instead: an unknown file
 stock (`comfy_extras.nodes_audio.load`), plus `path_override` for audio outside the input folder.
 
 ```
-loaded 'riff_meat_5s.wav': 5.00s, 48000 Hz, 2ch
+loaded 'your_take.wav': 5.00s, 48000 Hz, 2ch
 'no_such_file.wav' not found - 5s of silence instead. Nothing failed; ...
 ```
 

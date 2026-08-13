@@ -7,7 +7,8 @@ neither loss is visible from inside a graph.
 
 ### What the stock path costs
 
-Measured, not inferred. On a 121-frame LTX-2.5 generation the decode spans **−0.0715 … +1.0445**, and
+Measured, not inferred. The decode leaves `[0,1]` on every generation looked at here, by anywhere
+from **−0.0196 … +1.0186** to **−0.0715 … +1.0445** — 0.01–0.34% of samples — and
 `clamp_(0.0, 1.0)` in `comfy/sd.py:502` deletes all of it. Across `[0.2, 0.3]` of one frame the stock
 decode holds **77** distinct values (step 1/1024, the bfloat16 grid); the same latent decoded in float32
 holds **3 354 786** (step 2.98e-08). The two decodes differ by up to **0.0186** — five steps of an
@@ -81,7 +82,7 @@ Verified by full runs of the example graph:
 | toggle | file | result |
 |---|---|---|
 | generated | present | loader never ran, 121 EXR, 145 s |
-| external | present | `loaded 'riff_meat_5s.wav': 5.00s, 48000 Hz, 2ch`, 121 EXR, 94 s |
+| external | present | `loaded the wav: 5.00s, 48000 Hz, 2ch`, 121 EXR, 94 s |
 | external | **missing** | accepted, silence, 121 EXR, 84 s |
 
 ### Worth knowing before filing a bug

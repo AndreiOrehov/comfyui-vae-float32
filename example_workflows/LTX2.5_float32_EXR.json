@@ -401,7 +401,7 @@
         "ltx25/frame",
         false,
         false,
-        "riff_meat_5s.wav"
+        "your_take.wav"
       ]
     },
     {
@@ -4649,7 +4649,7 @@
               "Node name for S&R": "LoadAudioOptional"
             },
             "widgets_values": [
-              "riff_meat_5s.wav",
+              "your_take.wav",
               5.0,
               48000,
               ""
