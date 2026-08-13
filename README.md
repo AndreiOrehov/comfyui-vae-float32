@@ -73,6 +73,11 @@ This is not LTX-specific. Same still, same probe, stock vs this pack:
 | `minimax_h3_video_vae_fp16` | 2 378 | 137 317 | identity `process_output`, nothing to unclamp |
 | `taeltx2_3` (TAEHV) | 77 | 229 150 | identity `process_output` |
 
+Every row comes from [`tools/measure_precision.py`](tools/measure_precision.py), which loads the VAE
+outside the server and decodes the same latent twice — once the way ComfyUI does it, once without the
+clamp and in float32 — so the two columns differ in nothing but the decode. Point it at your own VAE
+and it prints the same two numbers for you.
+
 **Measured on:** ComfyUI 0.32.0 · RTX 5090 32 GB · Windows 11 · PyTorch 2.12.1+cu130 · Python 3.12.11
 · 126 GB RAM. One image round-tripped per VAE, plus a 121-frame 1280×704 LTX-2.5 generation for the
 timing and tiling numbers. Level counts and value ranges are properties of the decode path and should
