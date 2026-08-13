@@ -131,6 +131,14 @@ column, because a hard edge in the content looks identical to one.
 An 8/10-bit writer clips whatever sits above 1.0. When that matters, map it down deliberately —
 `clip`, `scale to fit`, `reinhard highlights`, or `report only`.
 
+> **On 10-bit output.** ComfyUI's `CreateVideo` has a `bit_depth` widget, and it does work — set it to
+> 10 and the file comes out `yuv420p10le`, High 10 profile, carrying 851 distinct luma values against
+> the 256 an 8-bit file can physically hold. But a container creates nothing: fed the stock bf16
+> decode, those 10 bits faithfully record the same 77 levels. The two are complementary — this pack
+> fixes *what goes in*, `bit_depth` fixes *what it goes into*. (Note also that 10-bit output is still
+> written untagged: `color_primaries/transfer/space = unknown`. That one needs a colour-managed
+> writer.)
+
 ### Save EXR (float32)
 
 Writes an EXR sequence through the **OpenEXR module**, not cv2, and verifies the file landed rather
