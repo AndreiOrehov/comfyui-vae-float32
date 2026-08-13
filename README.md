@@ -29,12 +29,20 @@
 process_output = lambda image: image.add_(1.0).div_(2.0).clamp_(0.0, 1.0)
 ```
 
-Decoders routinely emit values past those bounds. On a real LTX-2.5 generation the decode spans
-**−0.0715 … +1.0445**: specular highlights and shadow detail, deleted before any node downstream can
-see them.
+Decoders routinely emit values past those bounds, and the clamp deletes whatever is out there before
+any node downstream can see it. How much there is depends on the generation: across the runs measured
+here the decode spanned anywhere from **−0.0196 … +1.0186** to **−0.0715 … +1.0445**, with 0.01–0.34%
+of samples outside the bounds. It is the top of the speculars and the toe of the shadows — not a
+hidden stop of dynamic range, but the part a grade reaches for first.
 
 <div align="center">
 <img src="docs/assets/clamp_range.png" width="880" alt="Decoded value range per VAE against the [0,1] clamp bounds">
+</div>
+
+Red is above 1.0, blue is below 0.0, on one frame of a real generation:
+
+<div align="center">
+<img src="docs/assets/clamp_map.png" width="880" alt="Map of out-of-range pixels on a decoded frame">
 </div>
 
 ### 2. Most of the precision
@@ -70,6 +78,26 @@ This is not LTX-specific. Same still, same probe, stock vs this pack:
 timing and tiling numbers. Level counts and value ranges are properties of the decode path and should
 reproduce anywhere; the seconds are this machine's. Linux, macOS and other ComfyUI versions are
 untested — reports welcome.
+
+### What that actually looks like
+
+<div align="center">
+<img src="docs/assets/clamp_proof_city.jpg" width="880" alt="One frame decoded twice: stock, float32, and the amplified difference">
+</div>
+
+One latent, decoded twice. **The two pictures are indistinguishable, and that is the point** — nothing
+here looks broken, which is exactly why this goes unnoticed. The difference map, amplified ×200,
+shows where the two decodes disagree: a fine grain over the sky and the haze, which is the bfloat16
+grid sitting on the smooth gradients that band first under a grade, and bright specks on the light
+sources, which are the highlights the clamp cut off.
+
+<div align="center">
+<img src="docs/assets/clamp_proof_neon.jpg" width="880" alt="The same test on a neon-lit plate at 100x">
+</div>
+
+The same test on a neon plate, at ×100 because this frame disagrees twice as hard. Here the
+disagreement sits on the light bars themselves. Neither picture is retouched: both come out of one
+run, one latent, and the only difference is the decode path.
 
 ---
 
@@ -349,4 +377,16 @@ Apache-2.0.
 ![stock vs float32](docs/assets/stock_vs_float32.png)
 
 Both halves come from one latent in a single run: the only difference is the decode path.
+
+### What these plates get put through
+
+![one frame, two grades](docs/assets/grade_examples_row.jpg)
+
+The same LTX-2.5 frame under two heavy grades — the sort of push a plate takes when it has to match
+footage shot on a camera. Every one of those moves spends the levels the decode handed over, which is
+what the headroom is for.
+
+*(Those three are ordinary 8-bit exports: they show how far the material gets pushed, not what this
+pack adds. The evidence for that is [further up](#what-that-actually-looks-like). Same three
+[stacked vertically](docs/assets/grade_examples_column.jpg), if that reads better.)*
 
