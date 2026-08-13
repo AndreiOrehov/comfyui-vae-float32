@@ -1,0 +1,23 @@
+[project]
+name = "comfyui-vae-float32"
+description = "Honest float32 out of any ComfyUI VAE. Decode without the [0,1] clamp and in float32 instead of bfloat16, measure what the stock path throws away, catch tiling artefacts, and write real float32 EXR. Seven nodes: VAE Decode (float32, no clamp), VAE Encode (float32), Image Range Stats, Image Compare (numeric), Tile Seam Check, Remap Range, Save EXR (float32)."
+version = "1.0.0"
+license = { text = "MIT License" }
+requires-python = ">=3.9"
+dependencies = [
+    # OpenCV's EXR codec is disabled unless OPENCV_IO_ENABLE_OPENEXR=1 is set before cv2 is imported,
+    # which no ComfyUI launcher does - so EXR writing needs its own backend (3.3 brought the File API).
+    "OpenEXR>=3.3",
+    # Only reached if OpenEXR is somehow unavailable: a 32-bit float TIFF carries the same values.
+    "tifffile",
+    "numpy",
+]
+
+[project.urls]
+Repository = "https://github.com/AndreiOrehov/comfyui-vae-float32"
+
+[tool.comfy]
+PublisherId = "andreiorehov"
+DisplayName = "comfyui-vae-float32"
+Icon = "https://raw.githubusercontent.com/AndreiOrehov/comfyui-vae-float32/main/docs/assets/registry_icon.png"
+includes = []

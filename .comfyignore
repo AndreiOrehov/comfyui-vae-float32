@@ -1,0 +1,7 @@
+# Kept in git, left out of the Registry archive: documentation imagery, CI config and the
+# measurement scripts are for people reading the repository, not for people running the nodes.
+docs/assets/
+tools/
+.github/
+CHANGELOG.md
+.comfyignore
