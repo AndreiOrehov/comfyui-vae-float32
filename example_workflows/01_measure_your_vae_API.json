@@ -13,7 +13,7 @@
   }
  },
  "3": {
-  "class_type": "VAEEncodeFloat32",
+  "class_type": "ANDROVAEEncode",
   "inputs": {
    "precision": "float32",
    "pixels": [
@@ -27,7 +27,7 @@
   }
  },
  "4": {
-  "class_type": "VAEDecodeFloat32",
+  "class_type": "ANDROVAEDecode",
   "inputs": {
    "keep_out_of_range": true,
    "precision": "float32",
@@ -60,7 +60,7 @@
   }
  },
  "6": {
-  "class_type": "ImageRangeStats",
+  "class_type": "ANDRORangeStats",
   "inputs": {
    "label": "ours - float32, no clamp",
    "image": [
@@ -70,7 +70,7 @@
   }
  },
  "7": {
-  "class_type": "ImageRangeStats",
+  "class_type": "ANDRORangeStats",
   "inputs": {
    "label": "stock ComfyUI decode",
    "image": [
@@ -80,7 +80,7 @@
   }
  },
  "8": {
-  "class_type": "ImageCompareNumeric",
+  "class_type": "ANDROCompare",
   "inputs": {
    "amplify": 20.0,
    "image_a": [
@@ -103,7 +103,7 @@
   }
  },
  "10": {
-  "class_type": "SaveEXRFloat32",
+  "class_type": "ANDROSaveEXR",
   "inputs": {
    "filename_prefix": "float32_test/frame",
    "half_float": false,

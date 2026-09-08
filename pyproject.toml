@@ -1,7 +1,7 @@
 [project]
 name = "comfyui-vae-float32"
 description = "Honest float32 out of any ComfyUI VAE. Decode without the [0,1] clamp and in float32 instead of bfloat16, measure what the stock path throws away, catch tiling artefacts, and write real float32 EXR. By Andromediastudio (andromediastudio.com). Nine nodes: VAE Decode (float32, no clamp), VAE Encode (float32), Image Range Stats, Image Compare (numeric), Tile Seam Check, Remap Range, Save EXR (float32), Load Audio (optional), Audio Latent Switch (generated / external)."
-version = "1.2.1"
+version = "1.3.0"
 license = { text = "Apache-2.0" }
 authors = [{ name = "Andrei Orehov" }]
 requires-python = ">=3.9"
@@ -19,7 +19,7 @@ Repository = "https://github.com/AndreiOrehov/comfyui-vae-float32"
 
 [tool.comfy]
 PublisherId = "andreiorehov"
-DisplayName = "comfyui-vae-float32"
+DisplayName = "ANDRO - honest float32 VAE tools"
 # The Registry renders this wide, around 800x400, whatever the docs say about a 400x400 square.
 Icon = "https://raw.githubusercontent.com/AndreiOrehov/comfyui-vae-float32/main/docs/assets/registry_icon.png"
 # No Banner key: the Registry accepts it and never renders it. The image stays in docs/assets.

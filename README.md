@@ -130,11 +130,23 @@ pack adds. The evidence for that is [further up](#what-that-actually-looks-like)
 
 ---
 
-## The nodes
+## The nine nodes
 
-All under the **`vae_float32`** category.
+All under the **`ANDRO`** category, all coloured alike on the canvas so it is obvious at a glance
+which nodes in a graph are this pack's.
 
-### VAE Decode (float32, no clamp)
+What follows is the tour. For the wiring map — what plugs into what — and the full per-widget
+reference, read these:
+
+- **[docs/NODES.md](docs/NODES.md)** — the shape of every node, which socket takes what, and the one
+  wiring that is not obvious.
+- **[docs/NODES_DECODE.md](docs/NODES_DECODE.md)** — `ANDRO VAE Decode` and `ANDRO VAE Encode`.
+- **[docs/NODES_MEASURE.md](docs/NODES_MEASURE.md)** — `ANDRO Range Stats`, `ANDRO Compare`,
+  `ANDRO Seam Check`.
+- **[docs/NODES_OUTPUT.md](docs/NODES_OUTPUT.md)** — `ANDRO Remap Range`, `ANDRO Save EXR`.
+- **[docs/NODES_AUDIO.md](docs/NODES_AUDIO.md)** — `ANDRO Load Audio`, `ANDRO Audio Switch`.
+
+### ANDRO VAE Decode
 
 Drop-in replacement for `VAEDecode` / `VAEDecodeTiled`. Temporarily swaps `vae.process_output` for the
 same maths minus the clamp, optionally runs the decoder in float32, and restores both in `finally` —
@@ -147,23 +159,63 @@ only replaces shapes it recognises — anything unfamiliar is left alone and rep
 
 Turn `keep_out_of_range` off to reproduce stock ComfyUI exactly.
 
-### VAE Encode (float32)
+**`tiled` is on by default** (since 1.3.0), because float32 decoding is what makes the whole-frame path
+run out of VRAM in the first place — it holds the VAE at twice its usual weight and every intermediate
+at four bytes a sample. This costs no visible seam, and that is measured rather than hoped for: with
+the shipped defaults only the **spatial** split is active, and gradient excess at the spatial tile
+boundaries comes out at **1.03–1.05×**, against the 1.30× that Seam Check needs before it will even
+call something a peak. Turn it off for a single still that fits whole.
+
+The seam everyone actually runs into is the **temporal** one, and it is a different setting: cutting
+along time leaves the decoder with no context at the tile edge, so every seam gets a softer frame.
+`temporal_size` therefore ships at 4096 — high enough that nothing is cut along time at all. If you
+hit soft frames, the fix is to raise `temporal_size` and cut `tile_size` instead, never the reverse.
+
+**The node also estimates whether your tile fits, on your machine.** Tile cost is a cliff rather than
+a slope: while the decode fits in VRAM the size is nearly free, and the moment it stops fitting,
+weights page and the same decode takes tens of times longer with no error raised. *Where* that cliff
+sits depends on the card, the VAE and the frame size — 42 s against 1247 s is what it looked like on
+one RTX 5090, not a universal threshold. So the node asks `vae.memory_used_decode()` (ComfyUI's own
+per-VAE estimate) for one tile, compares it against free VRAM, and reports `fits` / `TIGHT` /
+`WILL NOT FIT`. Full calibration table, and why it is three states rather than a yes/no, in
+[docs/NODES_DECODE.md](docs/NODES_DECODE.md).
+
+### ANDRO VAE Encode
 
 The mirror image. Stock encode casts your pixels to the VAE's working dtype (usually bf16) before the
 weights see them, so feeding it a float32 plate discards the precision at the door.
 
-### Image Range Stats
+### ANDRO Range Stats
 
 How much of a batch is outside `[0,1]`, and how finely it is quantised. Every number in this README
-came from this node.
+came from this node. It passes the image straight through, so it sits *in* a chain rather than beside
+it.
 
-### Image Compare (numeric)
+The quantisation step is also reported as **effective bits** — a bf16 decode reads as 10.0, 8-bit
+material as 8.0 — with a `SATURATED` warning when the distinct-value count approaches the number of
+samples in the window, because past that point the step being measured belongs to the picture rather
+than to the format.
+
+It also answers the question the pretty pictures could not: **where would banding actually show up.**
+A band is one quantisation level held across several pixels, so risk needs a real gradient *and* local
+noise below the step — noisy material dithers itself and never bands. That comes out as a percentage
+and a `banding_mask`, plus a log-scaled `histogram` with the clamp limits marked. Validation table
+against six known-answer cases: [docs/NODES_MEASURE.md](docs/NODES_MEASURE.md).
+
+### ANDRO Compare
 
 Two batches in, metrics out: max and mean absolute difference, percentage of differing samples, PSNR,
-which frame deviates most — plus an amplified difference image. For answering "did that setting change
-anything, and is the change real" without exporting and diffing by hand.
+SSIM, the worst five frames — plus an amplified difference image. For answering "did that setting
+change anything, and is the change real" without exporting and diffing by hand.
 
-### Tile Seam Check
+**A global number cannot tell "spread thinly over the frame" from "all of it in one patch of sky",
+and only the second is worth acting on.** So the worst frame is split into an 8×8 grid and the hottest
+tile is named with its concentration factor. Measured on damage confined to one corner: PSNR 46.4 dB,
+which reads as fine, while the node reports the hottest zone at **17.3× the frame average** and says
+outright that the global figure is diluted. The report ends with a verdict — bit-identical, below a
+12-bit step, small and evenly spread, or structural and localised and worth the float32 decode.
+
+### ANDRO Seam Check
 
 Tiled decoding leaves artefacts, and the temporal kind is easy to miss. A diffusion decoder has no
 context at a temporal tile edge, so the blend leaves a visibly **softer frame on every seam** — smooth,
@@ -183,10 +235,35 @@ Same generation, temporal tiling off: `soft frames at [66] - no regular spacing,
 content`. It also checks for spatial seams, again requiring regularity rather than a single strong
 column, because a hard edge in the content looks identical to one.
 
-### Remap Range
+**It also predicts seams before the decode.** The spacing is arithmetic, not luck: `tile_t =
+temporal_size / temporal_compression`, and a seam lands every `(tile_t - overlap_t) × compression`
+frames. Hand it the settings and it says where the soft frames must fall, then confronts that with
+what it measured:
+
+```
+prediction: tile_t=4 latent frames, overlap_t=1 -> a soft frame every 24 output frames,
+            i.e. at [25, 49, 73, 97, 121]
+  ...
+  CONFIRMED: 4 of 5 predicted seam frames actually went soft - the temporal tiling is the cause
+```
+
+A prediction with nothing measured is reported as such — either the blend is gentler than the
+threshold, or the compression figure is wrong for that VAE. It does not quietly conclude "no seam".
+
+### ANDRO Remap Range
 
 An 8/10-bit writer clips whatever sits above 1.0. When that matters, map it down deliberately —
-`clip`, `scale to fit`, `reinhard highlights`, or `report only`.
+`filmic rolloff` (default), `clip`, `scale to fit`, `reinhard highlights`, or `report only`.
+
+The default exists because the obvious option is a bad trade. Overshoot is 0.01–0.34% of samples, and
+`scale to fit` pays for those few by moving **every** sample, flattening parts of the picture that
+were correctly exposed. `filmic rolloff` leaves everything below the knee bit-exact — verified,
+maximum change there is `0.0` — and bends only the top, mapping the input peak to exactly 1.0. On one
+plate that is 11.2% of samples moved against 100%, with the mid-tone untouched in the first case and
+shifted in the second.
+
+Either way the report gives the price in stops and names what it cost, including for `clip`, where it
+says how much is now unrecoverable and that this is identical to stock ComfyUI.
 
 > **On 10-bit output.** ComfyUI's `CreateVideo` has a `bit_depth` widget, and it does work — set it to
 > 10 and the file comes out `yuv420p10le`, High 10 profile, carrying 851 distinct luma values against
@@ -196,7 +273,7 @@ An 8/10-bit writer clips whatever sits above 1.0. When that matters, map it down
 > written untagged: `color_primaries/transfer/space = unknown`. That one needs a colour-managed
 > writer.)
 
-### Save EXR (float32)
+### ANDRO Save EXR
 
 Writes an EXR sequence through the **OpenEXR module**, not cv2, and verifies the file landed rather
 than trusting the writer.
@@ -207,7 +284,18 @@ than trusting the writer.
 > If your pack does that, it is worth checking — this one bit ComfyUI-OCIO too
 > ([fix](https://github.com/SlavaSexton/ComfyUI-OCIO/pull/5)).
 
-### Load Audio (optional)
+**The file records how its own pixels were made.** The header carries `andro/*` attributes — measured
+range, how much sat outside `[0,1]`, bit depth, frame count — and wiring `ANDRO VAE Decode`'s
+`range_report` into the `decode_report` input stores the decode's own account verbatim, dtypes
+included. Six months later the file still answers "was this the float32 pass?" on its own. This does
+not overlap OCIO, whose metadata describes the plate: camera, lens, timecode.
+
+Optionally the sequence gets a second layer, `clipped`, holding **exactly what the stock clamp would
+have deleted** and zero everywhere it would have kept the value — verified by reading the written
+files back. The loss then travels inside the file rather than in a screenshot someone has to be shown.
+Readers that ignore extra layers are unaffected.
+
+### ANDRO Load Audio
 
 Stock `LoadAudio` refuses a filename that is not in the input folder, and ComfyUI validates **every**
 node in a prompt before any of it runs. So a graph that merely *contains* an audio branch cannot run
@@ -230,7 +318,13 @@ loaded 'your_take.wav': 5.00s, 48000 Hz, 2ch
 'no_such_file.wav' not found - 5s of silence instead. Nothing failed; ...
 ```
 
-### Audio Latent Switch (generated / external)
+Duration, rate and channel count are always stated, because audio length frequently decides clip
+length and that is otherwise learned only after the run. A rate that differs from `sample_rate` is
+named either way, and `resample_to_sample_rate` converts it — 44100 → 48000 Hz turns 220500 samples
+into 240000 with the duration unchanged — rather than letting the mismatch surface as a confusing
+failure much further down the graph.
+
+### ANDRO Audio Switch
 
 `generated_audio`, `external_audio`, and one `audio_source` toggle reading **generated | external**.
 That toggle is the whole mechanic — nothing needs muting, deleting or re-wiring to change your mind.
@@ -356,13 +450,13 @@ The knobs that matter, all promoted onto the subgraph node:
   or 16f. 121 frames of 1280×704 float32 EXR is about 1.2 GB, so give it a folder of its own.
 - Resolution comes from the **`ResolutionSelector`** outside the subgraph, in megapixels: 0.9 gives
   1280×704, 2.1 gives 1920×1088. Editing the width and height fields does nothing, they are driven.
-- Inside, `VAEDecodeFloat32` is tiled at `tile_size 384` with `temporal_size 4096`. Leave it there
+- Inside, `ANDRO VAE Decode` is tiled at `tile_size 384` with `temporal_size 4096`. Leave it there
   unless you have read the tiling table above.
 
 **What it needs from you.** The start image: `LoadImage` is stock, and stock means a filename that is
 not in your `input/` folder fails the whole prompt before anything runs, so copy the png across or
 point the node at your own. The audio is the opposite — `your_take.wav` is not on your disk and does
-not need to be. `Load Audio (optional)` turns a missing file into silence and says so in its report,
+not need to be. `ANDRO Load Audio` turns a missing file into silence and says so in its report,
 and on `generated` the file is not read at all.
 
 `01_measure_your_vae_API.json` is the same starter graph flattened for the `/prompt` endpoint, for
@@ -370,8 +464,17 @@ driving it from a script.
 
 ## Install
 
-Clone into `ComfyUI/custom_nodes/` and restart. `pip install OpenEXR` if you want EXR output; the pack
-falls back to 32-bit float TIFF otherwise.
+**ComfyUI-Manager**: search for `comfyui-vae-float32` and install, then restart. The pack is published
+on the [Comfy Registry](https://registry.comfy.org/) under publisher `andreiorehov`.
+
+**By hand**: clone into `ComfyUI/custom_nodes/` and restart.
+
+Either way, `pip install OpenEXR` if you want EXR output; the pack falls back to 32-bit float TIFF
+otherwise, which carries the same values under a different extension.
+
+Upgrading from 1.2.x is safe: every node was renamed in 1.3.0, but the old keys stay registered and a
+graph saved earlier is migrated to the new names as it loads. Save the workflow once and it is
+permanent. See [CHANGELOG.md](CHANGELOG.md).
 
 ## Requirements
 
@@ -384,7 +487,7 @@ that appears when you select nodes on the canvas — has a ▶ button, and it do
 `Comfy.QueueSelectedOutputNodes`, which sends `partial_execution_targets`; the executor then keeps
 only those output nodes and drops every other one (`execution.py`, `partial_execution_list`).
 Measured here with `PreviewImage` selected: `outputs_to_execute` came back as `['9']`, and both
-`Image Range Stats` nodes and `Save EXR (float32)` never executed. The run still reported **success**,
+`ANDRO Range Stats` nodes and `ANDRO Save EXR` never executed. The run still reported **success**,
 with no message saying anything had been skipped.
 
 A plain Run queues every output node — verified on the same install: `outputs_to_execute:
@@ -412,7 +515,7 @@ not.
 This pack reaches into `vae.process_output`, `vae.vae_dtype` and `first_stage_model` — none of which
 are public API. A ComfyUI refactor can break it. The `-1/0/1` probe and the guarded fp32 cast are there
 so that a surprise degrades into "no change, with a note in the report" rather than a corrupted image,
-but if something looks wrong, compare against stock with **Image Compare (numeric)** first.
+but if something looks wrong, compare against stock with **ANDRO Compare** first.
 
 ## Licence and credit
 

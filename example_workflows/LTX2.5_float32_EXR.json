@@ -4298,7 +4298,7 @@
           },
           {
             "id": 374,
-            "type": "VAEDecodeFloat32",
+            "type": "ANDROVAEDecode",
             "pos": [
               4760,
               6360
@@ -4578,7 +4578,7 @@
           },
           {
             "id": 497,
-            "type": "LoadAudioOptional",
+            "type": "ANDROLoadAudio",
             "pos": [
               100.0,
               8020.0
@@ -4646,7 +4646,7 @@
               }
             ],
             "properties": {
-              "Node name for S&R": "LoadAudioOptional"
+              "Node name for S&R": "ANDROLoadAudio"
             },
             "widgets_values": [
               "your_take.wav",
@@ -4654,7 +4654,7 @@
               48000,
               ""
             ],
-            "title": "Load Audio (optional) — a missing file is silence, never an error"
+            "title": "ANDRO Load Audio — a missing file is silence, never an error"
           },
           {
             "id": 498,
@@ -4865,7 +4865,7 @@
           },
           {
             "id": 502,
-            "type": "SaveEXRFloat32",
+            "type": "ANDROSaveEXR",
             "pos": [
               5200,
               6740
@@ -4922,7 +4922,7 @@
               }
             ],
             "properties": {
-              "Node name for S&R": "SaveEXRFloat32"
+              "Node name for S&R": "ANDROSaveEXR"
             },
             "widgets_values": [
               "ltx25_f32/frame",
@@ -4932,7 +4932,7 @@
           },
           {
             "id": 503,
-            "type": "ImageRangeStats",
+            "type": "ANDRORangeStats",
             "pos": [
               5200,
               6940
@@ -4976,7 +4976,7 @@
               }
             ],
             "properties": {
-              "Node name for S&R": "ImageRangeStats"
+              "Node name for S&R": "ANDRORangeStats"
             },
             "widgets_values": [
               "LTX2.5 decode"
@@ -4984,7 +4984,7 @@
           },
           {
             "id": 504,
-            "type": "AudioLatentSwitch",
+            "type": "ANDROAudioSwitch",
             "pos": [
               993.9998270670571,
               7217.333333333333
@@ -5037,7 +5037,7 @@
               }
             ],
             "properties": {
-              "Node name for S&R": "AudioLatentSwitch"
+              "Node name for S&R": "ANDROAudioSwitch"
             },
             "widgets_values": [
               true

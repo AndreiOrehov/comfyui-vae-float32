@@ -1,5 +1,75 @@
 # Changelog
 
+## 1.3.0 - the pack gets a name, and the measurements get opinions
+
+### Every node renamed, and why your old graphs still work
+
+All nine nodes now carry the `ANDRO` prefix, sit in an `ANDRO` category, and share one colour on the
+canvas, so it is obvious at a glance which nodes in a graph belong to this pack. `VAE Decode (float32,
+no clamp)` is now `ANDRO VAE Decode`; the explanations that used to live in the titles moved into
+tooltips, where they belong.
+
+This was not only cosmetic. `NODE_CLASS_MAPPINGS` is one namespace shared by every installed pack, and
+the old keys were generic enough to collide — any other pack registering `RemapRange` or
+`ImageRangeStats` would have silently replaced ours, whichever loaded last.
+
+**Nothing breaks.** The nine old keys stay registered as deprecated aliases, so a graph saved on 1.2.x
+loads. On top of that, a workflow's node types are rewritten to the new names as it loads, including
+inside subgraphs, so the old names never appear on the canvas. Save the workflow once and it is
+permanent. Searching for `VAEDecodeFloat32` — or "vae decode no clamp", or "unclamped decode" — still
+finds the node, because every old name is registered as a search alias.
+
+### Tiling is on by default, and the cliff is now estimated for your machine
+
+`tiled` ships on. float32 decoding is what makes the whole-frame path run out of VRAM in the first
+place, and with the shipped defaults only the spatial split is active, which measures no seam
+(gradient excess 1.03–1.05× against a 1.30× detection threshold).
+
+1.2.x warned when `tile_size` went above 512. **That was wrong** — it was one card's number stated as
+a law. Where the cliff sits depends on the GPU, the VAE and the frame size. The node now asks
+`vae.memory_used_decode()` for one tile, compares it against free VRAM, and reports `fits` / `TIGHT` /
+`WILL NOT FIT`. Three states rather than two, because the data does not support a single threshold: a
+bf16 768 tile needing 95% of free VRAM ran fine in 12.1 s, while a float32 768 tile needing 191% took
+1247 s.
+
+### Measurements that answer questions instead of printing numbers
+
+**ANDRO Range Stats** reports the quantisation step as **effective bits** (bf16 reads 10.0), flags
+`SATURATED` when the distinct-value count is limited by the sample count rather than by the format,
+and adds a **banding-risk mask** plus a log-scaled histogram. Banding is decided from the physics — a
+band is one quantisation level held across several pixels, so it needs a gradient *and* local noise
+below the step. Validated on six synthetic cases: an 8-bit ramp scores 29.3%, the same ramp with
+dithering noise scores 0%.
+
+**ANDRO Compare** adds SSIM, the worst five frames, and an 8×8 zone map with a `worst_zones` mask,
+because a global PSNR cannot tell "spread thinly" from "all of it in the sky". Damage confined to one
+corner reads as PSNR 46.4 dB — which looks fine — while the node reports the hottest zone at 17.3× the
+frame average. Ends with a verdict on whether float32 is worth it for that shot.
+
+**ANDRO Seam Check** predicts seams from the decode settings before the decode, then confronts the
+prediction with what it measured. On the documented LTX-2.5 case it predicts soft frames at
+`[25, 49, 73, 97, 121]` and confirms four of them.
+
+### Output
+
+**ANDRO Remap Range** gains `filmic rolloff`, now the default: everything below the knee passes
+through bit-exact and only the top is bent, with the input peak mapped to exactly 1.0. On one plate
+that moves 11.2% of samples against 100% for `scale to fit`. Every mode now reports its price in
+stops.
+
+**ANDRO Save EXR** writes provenance into the header (`andro/*`: range, share outside `[0,1]`, bit
+depth, and the decode's own report if wired in) and can add a second layer, `clipped`, holding exactly
+what the stock clamp would have deleted. Both need the OpenEXR backend; the TIFF fallback says so
+rather than dropping them silently. A progress bar now runs during the write.
+
+**ANDRO Load Audio** states duration, rate and channels, and can resample to the target rate instead
+of letting a mismatch fail further down the graph.
+
+### Everything else
+
+Tooltips on all 33 inputs and all 9 outputs, up from 19 and 0. Descriptions on all nine nodes, up from
+one.
+
 ## 1.2.1 - the one to install
 
 No code change. Drops the `Banner` key from `pyproject.toml`: the Registry accepts it and then never

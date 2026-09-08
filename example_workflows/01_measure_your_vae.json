@@ -79,7 +79,7 @@
   },
   {
    "id": 3,
-   "type": "VAEEncodeFloat32",
+   "type": "ANDROVAEEncode",
    "pos": [
     400,
     300
@@ -121,7 +121,7 @@
     }
    ],
    "properties": {
-    "Node name for S&R": "VAEEncodeFloat32"
+    "Node name for S&R": "ANDROVAEEncode"
    },
    "widgets_values": [
     "float32"
@@ -129,7 +129,7 @@
   },
   {
    "id": 4,
-   "type": "VAEDecodeFloat32",
+   "type": "ANDROVAEDecode",
    "pos": [
     780,
     120
@@ -172,7 +172,7 @@
     }
    ],
    "properties": {
-    "Node name for S&R": "VAEDecodeFloat32"
+    "Node name for S&R": "ANDROVAEDecode"
    },
    "widgets_values": [
     true,
@@ -228,7 +228,7 @@
   },
   {
    "id": 6,
-   "type": "ImageRangeStats",
+   "type": "ANDRORangeStats",
    "pos": [
     1180,
     120
@@ -262,7 +262,7 @@
     }
    ],
    "properties": {
-    "Node name for S&R": "ImageRangeStats"
+    "Node name for S&R": "ANDRORangeStats"
    },
    "widgets_values": [
     "ours - float32, no clamp"
@@ -270,7 +270,7 @@
   },
   {
    "id": 7,
-   "type": "ImageRangeStats",
+   "type": "ANDRORangeStats",
    "pos": [
     1180,
     470
@@ -304,7 +304,7 @@
     }
    ],
    "properties": {
-    "Node name for S&R": "ImageRangeStats"
+    "Node name for S&R": "ANDRORangeStats"
    },
    "widgets_values": [
     "stock ComfyUI decode"
@@ -312,7 +312,7 @@
   },
   {
    "id": 8,
-   "type": "ImageCompareNumeric",
+   "type": "ANDROCompare",
    "pos": [
     1180,
     280
@@ -353,7 +353,7 @@
     }
    ],
    "properties": {
-    "Node name for S&R": "ImageCompareNumeric"
+    "Node name for S&R": "ANDROCompare"
    },
    "widgets_values": [
     20.0
@@ -388,7 +388,7 @@
   },
   {
    "id": 10,
-   "type": "SaveEXRFloat32",
+   "type": "ANDROSaveEXR",
    "pos": [
     1580,
     60
@@ -416,7 +416,7 @@
     }
    ],
    "properties": {
-    "Node name for S&R": "SaveEXRFloat32"
+    "Node name for S&R": "ANDROSaveEXR"
    },
    "widgets_values": [
     "float32_test/frame",

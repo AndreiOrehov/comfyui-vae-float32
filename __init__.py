@@ -8,4 +8,9 @@ See nodes.py for what each node does and why it exists.
 
 from .nodes import NODE_CLASS_MAPPINGS, NODE_DISPLAY_NAME_MAPPINGS
 
-__all__ = ["NODE_CLASS_MAPPINGS", "NODE_DISPLAY_NAME_MAPPINGS"]
+# Served at /extensions/comfyui-vae-float32/. Only one file lives there: the pack's house colour,
+# which has no Python-side equivalent - server.py's node_info() sends the frontend a fixed set of
+# fields and colour is not one of them.
+WEB_DIRECTORY = "./web"
+
+__all__ = ["NODE_CLASS_MAPPINGS", "NODE_DISPLAY_NAME_MAPPINGS", "WEB_DIRECTORY"]
