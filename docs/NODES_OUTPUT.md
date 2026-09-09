@@ -63,7 +63,8 @@ names the fact that this is identical to what stock ComfyUI does.
 ## ANDRO Save EXR
 
 Writes an `IMAGE` batch as a real float32 EXR sequence, values untouched - nothing clamped, scaled or
-tone-mapped on the way out. Frames are numbered from 1 as `stem.00001.exr`.
+tone-mapped on the way out. Frames are numbered from `start_frame` with `padding` digits, which
+defaults to `stem.00001.exr`.
 
 ### Backends, and why there are three
 
@@ -136,6 +137,53 @@ must also be what Nuke or Resolve is told on input, or the file will be misread 
 the header says which answer is correct. Like the rest of the metadata, this needs the OpenEXR backend; the
 TIFF fallback writes the picture alone, and the report says so.
 
+### Frame numbering
+
+`start_frame` and `padding` build the number in `stem.NNNNN.exr`. The defaults - 1 and 5 - are the
+historic `frame.00001.exr` exactly, so an existing graph keeps writing the names it always wrote.
+`start_frame = 1001`, `padding = 4` gives the VFX convention:
+
+```
+frame.1001.exr  frame.1002.exr  frame.1003.exr ...
+```
+
+A number too large for its padding is **not truncated** - truncation would put two frames on one
+filename. It grows the field instead, and the report says the width is no longer constant. The
+report's first line names the first and last file written.
+
+### The provenance manifest
+
+With `write_metadata` on, the header also records who made the file and out of what. The run's own
+identity comes from the machine; the rest is read out of the API graph ComfyUI passes in through the
+hidden `prompt` input, and every extraction is guarded - a save node that raised on odd metadata
+would lose the frames it was asked to write.
+
+| Header attribute | Contents |
+| --- | --- |
+| `andro/created` | ISO-8601 local time with UTC offset, e.g. `2026-09-08T17:49:28-07:00`. |
+| `andro/comfyVersion` | `comfyui_version.__version__`, or `unknown` outside ComfyUI. |
+| `andro/packVersion` | This pack's version, read from its `pyproject.toml`. |
+| *(no host name)* | the workstation name is written to the sidecar manifest only (`host`), not into the frame header - delivered frames travel to clients. |
+| `andro/shotInfo` | The `shot_info` widget, when non-empty. |
+| `andro/models` | Every checkpoint / unet / VAE / CLIP / LoRA filename in the graph, ` \| ` separated. |
+| `andro/seeds` | `KSampler#2=12345`, comma separated - the node that used each seed, not just the number. |
+| `andro/prompts` | `CLIPTextEncode#3: a lit corridor...`, one per line, each truncated to 400 chars. |
+| `andro/apiNodes` | One JSON object per line for Runway / Seedance / Kling / Veo / Luma / Pika / Minimax / Hailuo / OpenAI / Gemini / Sora / Wan / `*API*` node: its class and scalar settings. Nothing else on disk holds them. |
+| `andro/workflowHash` | sha256 of the canonicalised API graph. Same graph, same hash - moving a node on the canvas does not change it. |
+| `andro/workflow` | The whole UI workflow as JSON, when `embed_workflow` is on. |
+| `andro/prompt` | The whole API graph as JSON, when `embed_workflow` is on. |
+
+An EXR string attribute has no practical length limit: a ~100 KB workflow was written and read back
+intact. Turn `embed_workflow` **off for confidential graphs** - the summary attributes above, hash
+included, are still written.
+
+Beside the sequence the node writes `<stem>.manifest.json` (indent 2) carrying the same facts, except
+`models`, `seeds`, `prompts` and `apiNodes` stay lists and dicts instead of joined strings, plus
+`first_file` / `last_file`, `frames`, `range`, `outsideUnitRange`, `bitDepth`, the colourspace triple
+and `decodeReport`. `workflow` and `prompt` are present only when `embed_workflow` is on. It is the
+copy a script reads without an EXR library, and the one that survives a transcode that drops custom
+attributes.
+
 ### The `clipped` layer
 
 With `clipped_layer` on, the file gets a second layer named `clipped` holding **exactly what the stock
@@ -160,9 +208,18 @@ plainly that the picture was written without them.
 | `clipped_layer` | off | The second layer described above. |
 | `colorspace` | `srgb_display` | What the pixels are, written into the header as `andro/colorspace` + `andro/transfer` + `andro/primaries` + the standard `chromaticities`. A label, not a conversion. |
 | `colorspace_note` | empty | Free text appended to the label, e.g. `Flux.2 decode`. |
+| `start_frame` | 1 | Number the first frame gets. 1001 for the VFX convention. |
+| `padding` | 5 | Digits in the frame number. 5 -> `shot.00001.exr`, 4 with `start_frame` 1001 -> `shot.1001.exr`. Numbers too large are written in full, never truncated. |
+| `shot_info` | empty | Project / shot / artist / note. Goes into `andro/shotInfo` and the manifest. |
+| `embed_workflow` | on | Store the full workflow and API graph in the header and the manifest. Off for confidential graphs - the summary fields are still written. |
 
 | Input socket | |
 | --- | --- |
 | `decode_report:STRING*` | Optional. Wire `ANDRO VAE Decode`'s `range_report` here. |
+
+| Hidden input | |
+| --- | --- |
+| `prompt: PROMPT` | ComfyUI fills it in: the API graph that is actually running. Source of `andro/models`, `andro/seeds`, `andro/prompts`, `andro/apiNodes`, `andro/workflowHash` and `andro/prompt`. |
+| `extra_pnginfo: EXTRA_PNGINFO` | ComfyUI fills it in: the UI workflow the core `SaveImage` puts in a PNG chunk. Source of `andro/workflow`. |
 
 - `folder:STRING` - the folder actually written to.

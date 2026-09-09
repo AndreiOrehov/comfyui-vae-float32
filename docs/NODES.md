@@ -1,4 +1,4 @@
-# The nine nodes: what connects to what
+# The ten nodes: what connects to what
 
 This is the wiring map for the whole pack. It answers three questions and nothing else: what shape is each
 node, what may be plugged into it, and what does it plug into. For every widget, every allowed value and
@@ -11,6 +11,8 @@ every per-node detail, read the reference for that group:
 - **[NODES_OUTPUT.md](NODES_OUTPUT.md)** - `ANDRO Remap Range` and `ANDRO Save EXR`, the end of the chain.
 - **[NODES_AUDIO.md](NODES_AUDIO.md)** - `ANDRO Load Audio` and `ANDRO Audio Switch`, which exist because
   ComfyUI validates a whole prompt before it runs any of it.
+- **[NODES_QC.md](NODES_QC.md)** - `ANDRO Video QC`, the ingest check for a clip that arrived from a
+  generator rather than from this graph.
 
 Everything below was read out of the pack's own `NODE_CLASS_MAPPINGS`, not from memory. If your install
 disagrees, your install is the truth: ask it the same question with `GET /object_info/ANDROVAEDecode` and
@@ -32,6 +34,7 @@ validate. Widgets are left out here on purpose; the group references cover them.
 | `ANDRO Save EXR` | `images:IMAGE`, `decode_report:STRING*` | `folder:STRING` |
 | `ANDRO Load Audio` | none, the source is a widget | `audio:AUDIO`, `report:STRING` |
 | `ANDRO Audio Switch` | `generated_audio:LATENT*`, `external_audio:LATENT*` | `latent:LATENT`, `mode:STRING` |
+| `ANDRO Video QC` | `images:IMAGE` | `report:STRING`, `json:STRING`, `sheet:IMAGE`, `pass:BOOLEAN` |
 
 Five things fall straight out of that table.
 

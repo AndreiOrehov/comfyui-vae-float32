@@ -130,7 +130,7 @@ pack adds. The evidence for that is [further up](#what-that-actually-looks-like)
 
 ---
 
-## The nine nodes
+## The ten nodes
 
 All under the **`ANDRO`** category, all coloured alike on the canvas so it is obvious at a glance
 which nodes in a graph are this pack's.
@@ -145,6 +145,7 @@ reference, read these:
   `ANDRO Seam Check`.
 - **[docs/NODES_OUTPUT.md](docs/NODES_OUTPUT.md)** — `ANDRO Remap Range`, `ANDRO Save EXR`.
 - **[docs/NODES_AUDIO.md](docs/NODES_AUDIO.md)** — `ANDRO Load Audio`, `ANDRO Audio Switch`.
+- **[docs/NODES_QC.md](docs/NODES_QC.md)** — `ANDRO Video QC`.
 
 ### ANDRO VAE Decode
 
@@ -307,6 +308,29 @@ have deleted** and zero everywhere it would have kept the value — verified by 
 files back. The loss then travels inside the file rather than in a screenshot someone has to be shown.
 Readers that ignore extra layers are unaffected.
 
+**Frames are numbered the way your pipeline numbers them.** `start_frame` and `padding` decide the
+number in `stem.NNNNN.exr`; their defaults, 1 and 5, are exactly the historic `frame.00001.exr`, so
+an existing graph writes the same names it always did. Set `start_frame` to 1001 and `padding` to 4
+and the same batch lands as `frame.1001.exr`, `frame.1002.exr` — the convention Nuke, Resolve and
+every conform tool expect, without renaming a sequence after the fact. A number too large for its
+padding is written in full rather than truncated, because truncating would collide two frames onto
+one filename; the report says so when it happens, and names the first and last file either way.
+
+**The frame can also carry the graph that made it.** With `write_metadata` on, the header gains the
+run's identity — `andro/created` with its UTC offset, `andro/comfyVersion`, `andro/packVersion`,
+and your own `shot_info` (the host name goes only into the sidecar manifest, never into a frame that may travel to a client) — plus a summary read straight out of the API graph ComfyUI
+hands the node: every checkpoint, VAE, CLIP and LoRA filename (`andro/models`), every seed with the
+node that used it (`andro/seeds`), the text prompts (`andro/prompts`), the full settings of any
+API-generator node — Runway, Seedance, Kling, Veo, Luma, Sora and friends — whose parameters exist
+nowhere else on disk (`andro/apiNodes`), and `andro/workflowHash`, a sha256 of the canonicalised API
+graph, so two frames from the same graph hash alike no matter how the canvas was rearranged. With
+`embed_workflow` on, the whole workflow and prompt go in verbatim as well: a ~100 KB graph was
+written into a header attribute and read back intact. Turn `embed_workflow` **off for confidential
+graphs** — the summary fields, the hash included, are still written. Alongside the sequence the node
+drops `<stem>.manifest.json` holding the same facts structured rather than joined into strings, which
+is what a script reads without an EXR library, and what survives a transcode that discards custom
+attributes.
+
 ### ANDRO Load Audio
 
 Stock `LoadAudio` refuses a filename that is not in the input folder, and ComfyUI validates **every**
@@ -354,6 +378,39 @@ even decoded.
 
 Written for LTX's audio branch, where `LTXVConcatAVLatent` demands an audio latent, but it works
 anywhere an input is mandatory and you want it to be skippable.
+
+### ANDRO Video QC
+
+The one node here that is not about a VAE. Everything else in this pack asks *what did our decode
+do*; this one asks **what did the file someone sent us actually contain** — the check a pipeline TD
+runs before a plate is accepted.
+
+Point it at a clip out of Runway, Seedance or Kling and it reports effective bit depth and which
+quantisation grid the values sit on, the share outside `[0,1]` and any NaN, black frames, flashes,
+flicker, duplicate and **held** frames, resolution / frame count / fps against what was ordered,
+and — with `source_path` set, via `ffprobe` — codec, pixel format and the container's colour tags.
+One verdict (`PASS` / `WARN` / `FAIL`), a `pass:BOOLEAN` to gate a branch on, and a **contact sheet
+of the flagged frames, each labelled with its number and reason**, because half of what it flags is
+a judgement call that only looks settled once you see the frames.
+
+Two findings from the two real clips it was built against, both 24 fps h264:
+
+```
+WARN: untagged colour (space, transfer, primaries): readers will assume BT.601 / unknown transfer
+WARN: 81 held frame(s) = 22.4% of the clip
+  held (81): 7, 11, 15, 19, 23, 27, 59, 63, 67, 71, 75, 79, 83, 87, 91, 95, ...
+```
+
+**Untagged on all three colour fields** — the normal state of AI-generated video, and the most
+expensive item on the list, because the grade then starts from the wrong primaries and nothing
+errors. And a **period-4 held pattern**: roughly one frame in four barely moves, so a 24 fps file is
+carrying about 6 fps of motion. It conforms, it plays, and it judders on the first pan.
+
+One caveat the node prints for itself rather than letting you fall into: a `yuv420p` file reaches an
+`IMAGE` batch through a YUV → RGB matrix, which lands 8-bit values on a much finer grid — both clips
+measure ~50–60 k levels per channel on `k/65535`. When the container states a depth, the container
+wins, and the level count is describing the decode path. Full reference:
+**[docs/NODES_QC.md](docs/NODES_QC.md)**.
 
 ---
 

@@ -1,5 +1,33 @@
 # Changelog
 
+## 1.4.0 - the frame knows where it came from, and the plate gets checked before it is trusted
+
+### ANDRO Video QC (new node)
+
+An ingest report for generated video, the checks a pipeline TD runs before a plate is accepted:
+effective bit depth (with the container's word winning over a level count that the YUV-to-RGB
+decode inflates), range and NaN, black and flash frames, exact duplicates, held frames (a frame that
+barely moves against the clip's own median), flicker, resolution / frame count / fps against a spec,
+and the colour tags of the source file when `source_path` is given - an untagged file is a WARN,
+because every reader will then assume BT.601. Outputs a Markdown report, the same as JSON, a labelled
+contact sheet of the flagged frames, and a `pass` boolean to gate the rest of the graph. Measured on
+two API-generated clips: both untagged, one with 22 % held frames in a period-4 pattern - a 24 fps
+file carrying about 6 fps of motion. `docs/NODES_QC.md`.
+
+### ANDRO Save EXR: frame numbering and a provenance manifest
+
+- `start_frame` (1) and `padding` (5): the defaults reproduce today's `shot.00001.exr` exactly, so
+  saved graphs keep writing the same names; `1001` / `4` gives the VFX-standard `shot.1001.exr`.
+- The header now records how the frame was made: `andro/created`, `andro/comfyVersion`,
+  `andro/packVersion`, your `shot_info`, and a summary read straight out of the graph ComfyUI hands
+  the node - every model file (`andro/models`), every seed with its node (`andro/seeds`), the text
+  prompts (`andro/prompts`), the full settings of any cloud API node (`andro/apiNodes`), and a
+  `andro/workflowHash` that is the same for the same graph whatever the canvas layout. With
+  `embed_workflow` on (default) the whole workflow and API graph travel in the header too; turn it
+  off for confidential graphs and the summary stays. A sidecar `<stem>.manifest.json` carries the
+  same next to the sequence. The workstation name goes only into the sidecar, never into a frame
+  that may leave the building.
+
 ## 1.3.1 - the EXR says what colour it is
 
 `ANDRO Save EXR` gains `colorspace` and `colorspace_note`. Until now the file was silent about its own

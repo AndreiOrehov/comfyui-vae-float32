@@ -21,8 +21,13 @@ These nodes remove both losses, write the result as real float32 EXR, and give
 you the measurements to check any of it yourself.
 """
 
+import hashlib
+import json
 import logging
 import os
+import re
+import socket
+from datetime import datetime
 
 import numpy as np
 import torch
@@ -1161,6 +1166,129 @@ def _write_exr(path, rgb, half, attrs=None, clipped=None):
     return "tifffile(.tif)"
 
 
+# Input keys that name a weights file. Matched as substrings, so ckpt_name, unet_name and a
+# bare "model" all land here; the value is kept only when it is a string, because a socket
+# that is wired arrives as a ["node_id", slot] link list instead of a filename.
+_MODEL_KEYS = ("ckpt_name", "unet_name", "vae_name", "clip_name", "lora_name",
+               "model_name", "model")
+_SEED_KEYS = ("seed", "noise_seed")
+_PROMPT_KEYS = ("text", "prompt", "positive", "negative", "caption")
+# Generators that run off this machine. Their settings exist nowhere on disk - no checkpoint,
+# no lora, just the numbers that were POSTed - so the written file is the only place a shot's
+# API parameters can still be read months later.
+_API_MARKERS = ("runway", "seedance", "kling", "veo", "luma", "pika", "minimax", "hailuo",
+                "openai", "gemini", "sora", "wan", "api")
+_PROMPT_CHARS = 400
+
+
+def _summarise_prompt(prompt):
+    """Pull models, seeds, prompts and API settings out of an API graph.
+
+    prompt is what ComfyUI hands a node through the hidden PROMPT input: node_id ->
+    {"class_type", "inputs"}. Everything below is written defensively - the graph can be
+    None, can hold nodes whose inputs are links rather than values, and custom nodes can
+    put anything at all in there. A save node that raised on odd metadata would lose the
+    frames it was asked to write, which is the one outcome worse than a thin manifest.
+    """
+    out = {"models": [], "seeds": {}, "prompts": [], "apiNodes": []}
+    if not isinstance(prompt, dict):
+        return out
+    for node_id, node in prompt.items():
+        if not isinstance(node, dict):
+            continue
+        class_type = str(node.get("class_type", "?"))
+        inputs = node.get("inputs")
+        if not isinstance(inputs, dict):
+            inputs = {}
+        for key, value in inputs.items():
+            key_l = str(key).lower()
+            if isinstance(value, str):
+                if any(m in key_l for m in _MODEL_KEYS) and value not in out["models"]:
+                    out["models"].append(value)
+                if key_l in _PROMPT_KEYS and len(value.strip()) >= 3:
+                    out["prompts"].append({"node": f"{class_type}#{node_id}",
+                                           "text": value[:_PROMPT_CHARS]})
+            elif isinstance(value, int) and not isinstance(value, bool):
+                # bool is an int in Python and a seed never is one - so the isinstance
+                # check has to say so explicitly or every toggle becomes a seed.
+                if key_l in _SEED_KEYS:
+                    out["seeds"][f"{class_type}#{node_id}"] = value
+        if any(m in class_type.lower() for m in _API_MARKERS):
+            scalars = {k: v for k, v in inputs.items()
+                       if isinstance(v, (str, int, float, bool))}
+            out["apiNodes"].append({"class_type": class_type, "id": str(node_id),
+                                    "inputs": scalars})
+    return out
+
+
+def _provenance_attrs(prompt, extra_pnginfo, embed_workflow):
+    """The graph, as EXR header attributes. Strings only - a header attribute is typed.
+
+    Empty findings are left out rather than written as "", so a header never claims to have
+    looked at something it did not find. The hash is of the API graph, not the UI workflow,
+    so moving a node on the canvas does not change it while a changed seed does.
+    """
+    attrs = {}
+    summary = _summarise_prompt(prompt)
+    if summary["models"]:
+        attrs["andro/models"] = " | ".join(summary["models"])
+    if summary["seeds"]:
+        attrs["andro/seeds"] = ", ".join(f"{k}={v}" for k, v in summary["seeds"].items())
+    if summary["prompts"]:
+        attrs["andro/prompts"] = "\n".join(f"{p['node']}: {p['text']}"
+                                           for p in summary["prompts"])
+    if summary["apiNodes"]:
+        attrs["andro/apiNodes"] = "\n".join(json.dumps(n, ensure_ascii=False, sort_keys=True)
+                                            for n in summary["apiNodes"])
+    if prompt is not None:
+        try:
+            canonical = json.dumps(prompt, sort_keys=True, separators=(",", ":"))
+            attrs["andro/workflowHash"] = hashlib.sha256(
+                canonical.encode("utf-8")).hexdigest()
+        except Exception:
+            pass
+    if embed_workflow:
+        # An EXR string attribute has no practical length limit, so the whole graph fits -
+        # verified at ~100 KB, written and read back intact.
+        try:
+            if isinstance(extra_pnginfo, dict) and "workflow" in extra_pnginfo:
+                attrs["andro/workflow"] = json.dumps(extra_pnginfo["workflow"])
+            if prompt is not None:
+                attrs["andro/prompt"] = json.dumps(prompt)
+        except Exception:
+            pass
+    return attrs
+
+
+def _pack_version():
+    """The version of this pack, read off the pyproject.toml sitting next to this file."""
+    try:
+        path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "pyproject.toml")
+        with open(path, encoding="utf-8") as f:
+            for line in f:
+                m = re.match(r'\s*version\s*=\s*"([^"]+)"', line)
+                if m:
+                    return m.group(1)
+    except Exception:
+        pass
+    return "unknown"
+
+
+def _comfy_version():
+    try:
+        import comfyui_version
+        return str(comfyui_version.__version__)
+    except Exception:
+        return "unknown"
+
+
+def _hostname():
+    try:
+        return socket.gethostname()
+    except Exception:
+        return "unknown"
+
+
 class ANDROSaveEXR:
     """Write an IMAGE batch as a float32 EXR sequence, values untouched."""
 
@@ -1222,7 +1350,31 @@ class ANDROSaveEXR:
                     "default": "", "multiline": False,
                     "tooltip": "Free text appended to the label, e.g. 'Flux.2 decode' or 'after "
                                "OCIO ColorSpace to ACEScg'."}),
+                "start_frame": ("INT", {
+                    "default": 1, "min": 0, "max": 999999,
+                    "tooltip": "Number the first frame gets. 1 keeps the historic "
+                               "stem.00001.exr; VFX pipelines start a sequence at 1001."}),
+                "padding": ("INT", {
+                    "default": 5, "min": 1, "max": 8,
+                    "tooltip": "Digits in the frame number: 5 gives shot.00001.exr, and 4 with "
+                               "start_frame 1001 gives shot.1001.exr. A number too large for the "
+                               "padding is written in full rather than truncated."}),
+                "shot_info": ("STRING", {
+                    "default": "", "multiline": False,
+                    "tooltip": "Project / shot / artist / note. Free text; it goes into the EXR "
+                               "header as andro/shotInfo and into the manifest beside it."}),
+                "embed_workflow": ("BOOLEAN", {
+                    "default": True,
+                    "tooltip": "Store the full workflow graph in the EXR header and in the "
+                               "sidecar manifest, so the file can rebuild the run that made it. "
+                               "Turn it off for confidential graphs - the summary fields "
+                               "(models, seeds, prompts, API settings, hash) are still "
+                               "written."}),
             },
+            # ComfyUI fills these in itself: PROMPT is the API graph that is actually running,
+            # EXTRA_PNGINFO carries the UI workflow that SaveImage stashes in a PNG chunk. Same
+            # two the core save node uses - here they go into the EXR header instead.
+            "hidden": {"prompt": "PROMPT", "extra_pnginfo": "EXTRA_PNGINFO"},
         }
 
     RETURN_TYPES = ("STRING",)
@@ -1240,7 +1392,8 @@ class ANDROSaveEXR:
 
     def save(self, images, filename_prefix, half_float, output_folder="", write_metadata=True,
              decode_report="", clipped_layer=False, colorspace="srgb_display",
-             colorspace_note=""):
+             colorspace_note="", start_frame=1, padding=5, shot_info="", embed_workflow=True,
+             prompt=None, extra_pnginfo=None):
         base = output_folder.strip() or folder_paths.get_output_directory()
         full = os.path.join(base, filename_prefix)
         folder, stem = os.path.dirname(full), os.path.basename(full) or "frame"
@@ -1278,10 +1431,30 @@ class ANDROSaveEXR:
                 # or a numpy array here (and its error message misnames it a "6-tuple").
                 attrs["chromaticities"] = _CHROMATICITIES[primaries]
 
+            # When, where and with what. A local timestamp carrying its offset, because a
+            # sequence gets placed as "the pass I ran after lunch" long before anyone knows
+            # its UTC time - and the offset keeps that readable from another timezone.
+            attrs["andro/created"] = datetime.now().astimezone().isoformat(timespec="seconds")
+            attrs["andro/comfyVersion"] = _comfy_version()
+            attrs["andro/packVersion"] = _pack_version()
+            # The host name stays out of the EXR header on purpose: a delivered frame travels
+            # to clients and vendors, and a workstation name is nobody's business there. It
+            # is still recorded in the sidecar manifest, which stays with the shot.
+            if shot_info.strip():
+                attrs["andro/shotInfo"] = shot_info.strip()
+
+            # The graph, reduced to the four questions actually asked of a delivered frame:
+            # which weights, which seed, which prompt, which API call. Joined into strings
+            # here because an EXR attribute is one; the manifest keeps them structured.
+            attrs.update(_provenance_attrs(prompt, extra_pnginfo, embed_workflow))
+
         # A 121-frame EXR sequence is a slow, silent stretch otherwise - the node just looks hung.
         progress = comfy.utils.ProgressBar(arr.shape[0])
+        # start_frame 1 with padding 5 is the historic .00001.exr, so an untouched node writes
+        # exactly the names it always did; 1001 with padding 4 is the VFX convention.
+        names = [f"{stem}.{start_frame + i:0{padding}d}.exr" for i in range(arr.shape[0])]
         for i in range(arr.shape[0]):
-            path = os.path.join(folder, f"{stem}.{i + 1:05d}.exr")
+            path = os.path.join(folder, names[i])
             # What the stock clamp would have deleted, and zero wherever it would have kept the
             # value - so the layer is literally the loss, not a second copy of the picture.
             clipped = (arr[i] - np.clip(arr[i], 0.0, 1.0)) if clipped_layer else None
@@ -1295,12 +1468,29 @@ class ANDROSaveEXR:
                         f"EXR write produced no file at {path} (backend {backend}). Install the "
                         "OpenEXR python module, or start ComfyUI with OPENCV_IO_ENABLE_OPENEXR=1.")
 
+        # Written after the loop so it can name the files that actually landed. The header
+        # travels with every frame; this is the copy a human or a script reads without an EXR
+        # library, and the one that survives a transcode that drops custom attributes.
+        manifest_path = None
+        if write_metadata:
+            manifest_path = self._write_manifest(
+                folder, stem, names, attrs, arr, half_float, colorspace, colorspace_note,
+                decode_report, shot_info, prompt, extra_pnginfo, embed_workflow)
+
         lo = float((arr < 0.0).mean() * 100.0)
         hi = float((arr > 1.0).mean() * 100.0)
+        span = f"{names[0]} .. {names[-1]}" if len(names) > 1 else (names[0] if names
+                                                                  else "no frames")
         msg = (f"wrote {written} frame(s) via {backend} "
-               f"({'16f' if half_float else '32f'}) to {folder}\n"
+               f"({'16f' if half_float else '32f'}): {span} in {folder}\n"
                f"{_SLOT}range carried: min={arr.min():+.6f} max={arr.max():+.6f} "
                f"({lo:.4f}% below 0, {hi:.4f}% above 1)")
+        last_number = start_frame + max(arr.shape[0] - 1, 0)
+        if len(str(last_number)) > padding:
+            # Truncating would collide two frames onto one filename, so the number outgrows the
+            # field instead - the sequence stays complete, only its number width varies.
+            msg += (f"\n{_SLOT}note: frame numbers up to {last_number} do not fit padding "
+                    f"{padding} - written in full, so the number width is not constant")
         if backend != "OpenEXR" and (write_metadata or clipped_layer):
             msg += (f"\n{_SLOT}note: metadata and the clipped layer need the OpenEXR backend - "
                     f"{backend} wrote the picture only")
@@ -1317,8 +1507,62 @@ class ANDROSaveEXR:
                     f"primaries: {cs_primaries}")
         else:
             msg += f"\n{_SLOT}colorspace: not written (write_metadata off)"
+        if manifest_path:
+            msg += f"\n{_SLOT}manifest: {manifest_path}"
         logger.info("[vae_float32] %s", msg.replace("\n", " "))
         return {"ui": {"text": [msg]}, "result": (folder,)}
+
+    @staticmethod
+    def _write_manifest(folder, stem, names, attrs, arr, half_float, colorspace, colorspace_note,
+                        decode_report, shot_info, prompt, extra_pnginfo, embed_workflow):
+        """Write <stem>.manifest.json beside the sequence. Returns its path, or None.
+
+        Never fatal on purpose: the frames are already on disk by the time this runs, and a
+        sidecar that failed to serialise is not a reason to fail a render.
+        """
+        path = os.path.join(folder, f"{stem}.manifest.json")
+        note = colorspace_note.strip()
+        transfer, primaries = _COLORSPACES.get(colorspace, _COLORSPACES["unspecified"])
+        summary = _summarise_prompt(prompt)
+        lo_pct = float((arr < 0.0).mean() * 100.0)
+        hi_pct = float((arr > 1.0).mean() * 100.0)
+        manifest = {
+            "writer": "comfyui-vae-float32 (ANDRO Save EXR)",
+            "packVersion": _pack_version(),
+            "comfyVersion": _comfy_version(),
+            "created": attrs.get("andro/created", ""),
+            "host": _hostname(),
+            "shotInfo": shot_info.strip(),
+            "colorspace": f"{colorspace} - {note}" if note else colorspace,
+            "transfer": transfer,
+            "primaries": primaries,
+            "bitDepth": "16f" if half_float else "32f",
+            "frames": int(arr.shape[0]),
+            "first_file": names[0] if names else "",
+            "last_file": names[-1] if names else "",
+            "range": f"{arr.min():+.6f} .. {arr.max():+.6f}",
+            "outsideUnitRange": f"{lo_pct:.4f}% below 0, {hi_pct:.4f}% above 1",
+            "decodeReport": decode_report.strip(),
+            "workflowHash": attrs.get("andro/workflowHash", ""),
+            # Structured here, joined into strings in the header - the same facts, except a
+            # script reading the manifest does not have to unpick a " | " separated list.
+            "models": summary["models"],
+            "seeds": summary["seeds"],
+            "prompts": summary["prompts"],
+            "apiNodes": summary["apiNodes"],
+        }
+        if embed_workflow:
+            if isinstance(extra_pnginfo, dict) and "workflow" in extra_pnginfo:
+                manifest["workflow"] = extra_pnginfo["workflow"]
+            if prompt is not None:
+                manifest["prompt"] = prompt
+        try:
+            with open(path, "w", encoding="utf-8") as f:
+                json.dump(manifest, f, indent=2, ensure_ascii=False)
+        except Exception as exc:
+            logger.warning("[vae_float32] manifest not written (%s): %s", path, exc)
+            return None
+        return path
 
 
 class ANDROAudioSwitch:
