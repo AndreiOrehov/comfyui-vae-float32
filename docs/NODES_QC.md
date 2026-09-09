@@ -11,7 +11,7 @@ onward to the rest of the graph and hang this off the same socket.
 Two independent sources of truth are used, and they are kept apart on purpose:
 
 - the **pixels**, which say what the decoder produced;
-- the **container**, via `ffprobe` on `source_path`, which says what the file *claims*.
+- the **container**, via PyAV on `source_path`, which says what the file *claims*.
 
 Most ingest surprises live in the gap between the two. Without `source_path` everything except the
 fps and colour-tag checks still runs.
@@ -95,7 +95,7 @@ scrub-through.
 **Any mismatch is a FAIL** — this is the check that catches a generator quietly returning 96 frames
 for a 4 s 24 fps order, which is a changed edit, not a variation.
 
-`expected_fps` is only answerable from `ffprobe`: an `IMAGE` batch carries no timebase. Asked for
+`expected_fps` is only answerable from the container probe: an `IMAGE` batch carries no timebase. Asked for
 without a probe, the node says the check could not run rather than passing it.
 
 ### 6. Colour tags

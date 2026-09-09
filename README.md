@@ -388,7 +388,7 @@ runs before a plate is accepted.
 Point it at a clip out of Runway, Seedance or Kling and it reports effective bit depth and which
 quantisation grid the values sit on, the share outside `[0,1]` and any NaN, black frames, flashes,
 flicker, duplicate and **held** frames, resolution / frame count / fps against what was ordered,
-and — with `source_path` set, via `ffprobe` — codec, pixel format and the container's colour tags.
+and — with `source_path` set, via PyAV — codec, pixel format and the container's colour tags.
 One verdict (`PASS` / `WARN` / `FAIL`), a `pass:BOOLEAN` to gate a branch on, and a **contact sheet
 of the flagged frames, each labelled with its number and reason**, because half of what it flags is
 a judgement call that only looks settled once you see the frames.
