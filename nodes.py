@@ -26,7 +26,7 @@ import json
 import logging
 import os
 import re
-import socket
+import platform
 from datetime import datetime
 
 import numpy as np
@@ -1284,7 +1284,7 @@ def _comfy_version():
 
 def _hostname():
     try:
-        return socket.gethostname()
+        return platform.node()
     except Exception:
         return "unknown"
 

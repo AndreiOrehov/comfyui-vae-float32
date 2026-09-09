@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.4.1 - no processes spawned
+
+The Registry flagged 1.4.0: `ANDRO Video QC` probed the source file by spawning `ffprobe`, and
+custom nodes are not allowed to start processes. The probe now reads the container through PyAV -
+the library ComfyUI decodes video with - and reports the same fields (codec, pixel format and bit
+depth, size, frame rate, frame count, colour space / transfer / primaries / range, untagged
+list). FFmpeg's colour enums are mapped to their names; unspecified stays "unknown". The sidecar
+manifest's host name now comes from `platform.node()` rather than the socket module. No other
+behaviour changed.
+
 ## 1.4.0 - the frame knows where it came from, and the plate gets checked before it is trusted
 
 ### ANDRO Video QC (new node)

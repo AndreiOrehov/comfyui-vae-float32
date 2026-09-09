@@ -25,8 +25,6 @@ import json as _json
 import logging
 import os
 import re
-import shutil
-import subprocess
 
 import numpy as np
 import torch
@@ -66,7 +64,7 @@ _GRID_SAMPLES = 200_000
 # between the two, so it absorbs the arithmetic without ever letting one grid pass for another.
 _GRID_TOL = 1e-6
 
-# ffprobe's way of saying "there is no tag here". An untagged file is not a broken file - it is a
+# FFmpeg's way (enum 2 = unspecified) of saying "there is no tag here". An untagged file is not a broken file - it is a
 # file whose meaning depends on who opens it, which is worse, because nothing errors.
 _UNTAGGED = {"", "unknown", "reserved", "n/a", "none", "unspecified"}
 
@@ -100,64 +98,80 @@ def _pix_fmt_depth(pix_fmt):
     return None
 
 
+_AV_PRIMARIES = {1: "bt709", 4: "bt470m", 5: "bt470bg", 6: "smpte170m", 7: "smpte240m", 8: "film", 9: "bt2020",
+                 10: "smpte428", 11: "smpte431", 12: "smpte432", 22: "jedec-p22"}
+_AV_TRANSFER = {1: "bt709", 4: "gamma22", 5: "gamma28", 6: "smpte170m", 7: "smpte240m", 8: "linear", 9: "log100",
+                10: "log316", 11: "iec61966-2-4", 12: "bt1361e", 13: "iec61966-2-1", 14: "bt2020-10", 15: "bt2020-12",
+                16: "smpte2084", 17: "smpte428", 18: "arib-std-b67"}
+_AV_SPACE = {0: "gbr", 1: "bt709", 4: "fcc", 5: "bt470bg", 6: "smpte170m", 7: "smpte240m", 8: "ycgco", 9: "bt2020nc",
+             10: "bt2020c", 11: "smpte2085", 12: "chroma-derived-nc", 13: "chroma-derived-c", 14: "ictcp"}
+_AV_RANGE = {1: "tv", 2: "pc"}
+
+
 def _ffprobe(path):
     """Container truth for one video file: {..} on success, or {"error": "..."}.
+
+    Read with PyAV (the library ComfyUI itself decodes video with), not by spawning an external
+    probe: the Registry forbids spawning processes from custom nodes, and PyAV exposes the same
+    stream fields. The FFmpeg colour enums come back as integers; 2 = unspecified is the untagged
+    case, and a value missing from the tables below is reported as its number, never guessed.
 
     Kept separate from the pixel statistics on purpose. The tensor says what the decoder produced;
     the container says what the file CLAIMS. Most ingest surprises are the gap between the two.
     """
-    exe = shutil.which("ffprobe")
-    if exe is None:
-        return {"error": "ffprobe not found on PATH"}
     if not os.path.isfile(path):
         return {"error": f"file not found: {path}"}
-    cmd = [exe, "-v", "error", "-select_streams", "v:0", "-show_entries",
-           "stream=codec_name,pix_fmt,width,height,r_frame_rate,nb_frames,"
-           "color_space,color_transfer,color_primaries,color_range",
-           "-of", "json", path]
     try:
-        out = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
-    except (OSError, subprocess.SubprocessError) as exc:
-        return {"error": f"ffprobe failed: {exc}"}
-    if out.returncode != 0:
-        return {"error": f"ffprobe exit {out.returncode}: {out.stderr.strip()[:200]}"}
+        import av
+    except ImportError as exc:
+        return {"error": f"PyAV not available: {exc}"}
     try:
-        streams = _json.loads(out.stdout).get("streams") or []
-    except ValueError as exc:
-        return {"error": f"ffprobe returned unparsable json: {exc}"}
-    if not streams:
-        return {"error": "no video stream"}
+        with av.open(path) as container:
+            if not container.streams.video:
+                return {"error": "no video stream"}
+            st = container.streams.video[0]
+            cc = st.codec_context
+            rate = st.average_rate or st.base_rate or st.guessed_rate
+            fps = float(rate) if rate else None
+            rate_txt = f"{rate.numerator}/{rate.denominator}" if rate is not None else ""
+            nb = int(st.frames) if st.frames else None
+            if nb is None and st.duration and st.time_base and fps:
+                nb = int(round(float(st.duration * st.time_base) * fps))
 
-    s = streams[0]
-    fps = None
-    rate = s.get("r_frame_rate") or ""
-    if "/" in rate:
-        num, den = rate.split("/", 1)
-        try:
-            fps = float(num) / float(den) if float(den) else None
-        except ValueError:
-            fps = None
-    nb = s.get("nb_frames")
-    try:
-        nb = int(nb)
-    except (TypeError, ValueError):
-        nb = None
+            def name(table, value, unspecified=2):
+                v = int(value) if value is not None else unspecified
+                if v == unspecified:
+                    return "unknown"
+                return table.get(v, str(v))
 
-    tags = {k: (s.get(k) or "") for k in ("color_space", "color_transfer", "color_primaries")}
+            info = {
+                "codec_name": cc.name,
+                "pix_fmt": cc.pix_fmt,
+                "width": st.width,
+                "height": st.height,
+                "color_space": name(_AV_SPACE, getattr(cc, "colorspace", None)),
+                "color_transfer": name(_AV_TRANSFER, getattr(cc, "color_trc", None)),
+                "color_primaries": name(_AV_PRIMARIES, getattr(cc, "color_primaries", None)),
+                "color_range": _AV_RANGE.get(int(getattr(cc, "color_range", 0) or 0), ""),
+            }
+    except Exception as exc:                                    # PyAV raises a family of av.* errors
+        return {"error": f"probe failed: {exc}"}
+
+    tags = {k: (info.get(k) or "") for k in ("color_space", "color_transfer", "color_primaries")}
     untagged = [k for k, v in tags.items() if v.strip().lower() in _UNTAGGED]
     return {
-        "codec_name": s.get("codec_name"),
-        "pix_fmt": s.get("pix_fmt"),
-        "pix_fmt_bits": _pix_fmt_depth(s.get("pix_fmt")),
-        "width": s.get("width"),
-        "height": s.get("height"),
-        "r_frame_rate": rate,
+        "codec_name": info["codec_name"],
+        "pix_fmt": info["pix_fmt"],
+        "pix_fmt_bits": _pix_fmt_depth(info["pix_fmt"]),
+        "width": info["width"],
+        "height": info["height"],
+        "r_frame_rate": rate_txt,
         "fps": fps,
         "nb_frames": nb,
         "color_space": tags["color_space"],
         "color_transfer": tags["color_transfer"],
         "color_primaries": tags["color_primaries"],
-        "color_range": s.get("color_range") or "",
+        "color_range": info["color_range"],
         "untagged": untagged,
     }
 
