@@ -101,6 +101,41 @@ andro/decodeReport      = decode (float32, no clamp): min=-0.071500 max=+1.04450
 This does not overlap OCIO. Its metadata describes the plate - camera, lens, editorial attributes, timecode.
 This describes where the pixels came from.
 
+### The colour encoding, stated in the header
+
+An untagged EXR is read as linear by every compositor that opens it. For a decoded SDR frame that is wrong:
+what the VAE returns is **display-referred sRGB/Rec.709 gamma**, which is what SD, Flux, Wan and LTX SDR all
+produce - hence the `srgb_display` default. The two exceptions: LTX-2.5 HDR decodes are **ACEScct**, and the
+LTX-2.3 HDR IC-LoRA is **LogC3**.
+
+The `colorspace` widget writes three readable strings plus the standard OpenEXR `chromaticities` attribute
+(skipped for `unspecified`, whose primaries are unknown by definition). Verified by writing files and reading
+the headers back:
+
+```
+andro/colorspace  = acescg - after OCIO ColorSpace to ACEScg
+andro/transfer    = linear
+andro/primaries   = ACES AP1
+chromaticities    = (0.713, 0.293, 0.165, 0.830, 0.128, 0.044, 0.32168, 0.33767)   # a real
+                    # chromaticities attribute, not a string - confirmed in the file's bytes
+```
+
+| `colorspace` | `andro/transfer` | `andro/primaries` |
+| --- | --- | --- |
+| `srgb_display` (default) | `sRGB piecewise` | `Rec.709` |
+| `rec709_display` | `BT.1886 gamma 2.4` | `Rec.709` |
+| `linear_rec709` | `linear` | `Rec.709` |
+| `acescg` | `linear` | `ACES AP1` |
+| `acescct` | `ACEScct log` | `ACES AP1` |
+| `aces2065_1` | `linear` | `ACES AP0` |
+| `logc3` | `ARRI LogC3 EI800` | `ARRI Wide Gamut 3` |
+| `unspecified` | `unspecified` | `unspecified` (no `chromaticities`) |
+
+**Nothing is converted.** The widget labels the pixels; it does not transform them. Whatever you pick here
+must also be what Nuke or Resolve is told on input, or the file will be misread exactly as before - only now
+the header says which answer is correct. Like the rest of the metadata, this needs the OpenEXR backend; the
+TIFF fallback writes the picture alone, and the report says so.
+
 ### The `clipped` layer
 
 With `clipped_layer` on, the file gets a second layer named `clipped` holding **exactly what the stock
@@ -123,6 +158,8 @@ plainly that the picture was written without them.
 | `output_folder` | empty | Absolute path, or empty for the ComfyUI output directory. |
 | `write_metadata` | on | The `andro/*` header attributes. |
 | `clipped_layer` | off | The second layer described above. |
+| `colorspace` | `srgb_display` | What the pixels are, written into the header as `andro/colorspace` + `andro/transfer` + `andro/primaries` + the standard `chromaticities`. A label, not a conversion. |
+| `colorspace_note` | empty | Free text appended to the label, e.g. `Flux.2 decode`. |
 
 | Input socket | |
 | --- | --- |

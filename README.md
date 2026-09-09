@@ -290,6 +290,18 @@ range, how much sat outside `[0,1]`, bit depth, frame count — and wiring `ANDR
 included. Six months later the file still answers "was this the float32 pass?" on its own. This does
 not overlap OCIO, whose metadata describes the plate: camera, lens, timecode.
 
+**The header also says what colour the numbers are.** An untagged EXR is read as linear by every
+compositor that opens it, and for a decoded SDR frame that is simply wrong: what a VAE hands back is
+**display-referred sRGB/Rec.709 gamma**, which is why `colorspace` defaults to `srgb_display`. Two
+exceptions worth knowing: LTX-2.5 HDR decodes are **ACEScct**, and the LTX-2.3 HDR IC-LoRA is
+**LogC3**. The choice writes `andro/colorspace`, `andro/transfer`, `andro/primaries` and — for every
+known gamut — the standard OpenEXR `chromaticities` attribute, so a reader can act on it rather than
+guess. `colorspace_note` appends free text ("Flux.2 decode", "after OCIO ColorSpace to ACEScg").
+
+This is a **label, not a conversion**: not one pixel is touched. Nuke, Resolve and anything else
+reading the sequence must be told the same colourspace on input — the file is not linearised on the
+way out, it is only finally honest about what it holds.
+
 Optionally the sequence gets a second layer, `clipped`, holding **exactly what the stock clamp would
 have deleted** and zero everywhere it would have kept the value — verified by reading the written
 files back. The loss then travels inside the file rather than in a screenshot someone has to be shown.

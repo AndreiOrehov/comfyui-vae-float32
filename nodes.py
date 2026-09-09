@@ -1092,6 +1092,30 @@ class ANDRORemapRange:
         return (out, report)
 
 
+# What a colourspace label means in the two terms a reader actually needs, plus the standard
+# EXR chromaticities for those primaries. This is a LABEL: nothing here converts a pixel. An
+# untagged EXR is read as linear by every compositor that opens it, which for a decoded SDR
+# frame is wrong twice - the transfer curve, and for ACES material the primaries as well.
+_CHROMATICITIES = {
+    "Rec.709":           (0.640, 0.330, 0.300, 0.600, 0.150, 0.060, 0.3127, 0.3290),
+    "ACES AP1":          (0.713, 0.293, 0.165, 0.830, 0.128, 0.044, 0.32168, 0.33767),
+    "ACES AP0":          (0.7347, 0.2653, 0.0, 1.0, 0.0001, -0.0770, 0.32168, 0.33767),
+    "ARRI Wide Gamut 3": (0.6840, 0.3130, 0.2210, 0.8480, 0.0861, -0.1020, 0.3127, 0.3290),
+}
+
+# colorspace label -> (transfer function, primaries)
+_COLORSPACES = {
+    "srgb_display":   ("sRGB piecewise",    "Rec.709"),
+    "rec709_display": ("BT.1886 gamma 2.4", "Rec.709"),
+    "linear_rec709":  ("linear",            "Rec.709"),
+    "acescg":         ("linear",            "ACES AP1"),
+    "acescct":        ("ACEScct log",       "ACES AP1"),
+    "aces2065_1":     ("linear",            "ACES AP0"),
+    "logc3":          ("ARRI LogC3 EI800",  "ARRI Wide Gamut 3"),
+    "unspecified":    ("unspecified",       "unspecified"),
+}
+
+
 def _write_exr(path, rgb, half, attrs=None, clipped=None):
     """Write one HxWx3 float array as EXR. Returns the backend used.
 
@@ -1186,6 +1210,18 @@ class ANDROSaveEXR:
                                "have kept the value. The evidence then travels inside the file "
                                "instead of in a screenshot. Costs roughly double the file size, "
                                "and readers that ignore extra layers are unaffected."}),
+                "colorspace": (list(_COLORSPACES.keys()), {
+                    "default": "srgb_display",
+                    "tooltip": "What these pixels ARE, written into the header. A decoded SDR "
+                               "generation is display-referred sRGB/Rec.709 gamma, not linear - "
+                               "that is what most VAEs produce (SD, Flux, Wan, LTX SDR), so "
+                               "srgb_display is the honest default. Two exceptions: LTX-2.5 HDR "
+                               "decodes are ACEScct, and the LTX-2.3 HDR IC-LoRA is LogC3. This "
+                               "writes a label - no pixel is converted."}),
+                "colorspace_note": ("STRING", {
+                    "default": "", "multiline": False,
+                    "tooltip": "Free text appended to the label, e.g. 'Flux.2 decode' or 'after "
+                               "OCIO ColorSpace to ACEScg'."}),
             },
         }
 
@@ -1203,7 +1239,8 @@ class ANDROSaveEXR:
                    "EXR backend is available, and refuses to claim a write it cannot verify.")
 
     def save(self, images, filename_prefix, half_float, output_folder="", write_metadata=True,
-             decode_report="", clipped_layer=False):
+             decode_report="", clipped_layer=False, colorspace="srgb_display",
+             colorspace_note=""):
         base = output_folder.strip() or folder_paths.get_output_directory()
         full = os.path.join(base, filename_prefix)
         folder, stem = os.path.dirname(full), os.path.basename(full) or "frame"
@@ -1227,6 +1264,19 @@ class ANDROSaveEXR:
                 # Stored verbatim: it already states the dtypes the decode ran in and what the
                 # clamp would have removed, and paraphrasing it here would let the two drift.
                 attrs["andro/decodeReport"] = decode_report.strip()
+
+            # The file stops being silent about what its numbers mean. The andro/* strings are
+            # readable by anyone; the standard chromaticities attribute is the part a compositor
+            # can act on. Neither touches a pixel - the transfer curve is stated, not applied.
+            note = colorspace_note.strip()
+            transfer, primaries = _COLORSPACES.get(colorspace, _COLORSPACES["unspecified"])
+            attrs["andro/colorspace"] = f"{colorspace} - {note}" if note else colorspace
+            attrs["andro/transfer"] = transfer
+            attrs["andro/primaries"] = primaries
+            if primaries in _CHROMATICITIES:
+                # A plain 8-float tuple, and nothing else: the OpenEXR 3.x binding refuses a list
+                # or a numpy array here (and its error message misnames it a "6-tuple").
+                attrs["chromaticities"] = _CHROMATICITIES[primaries]
 
         # A 121-frame EXR sequence is a slow, silent stretch otherwise - the node just looks hung.
         progress = comfy.utils.ProgressBar(arr.shape[0])
@@ -1258,6 +1308,15 @@ class ANDROSaveEXR:
             msg += f"\n{_SLOT}header carries the provenance attributes (andro/*)"
         if clipped_layer and backend == "OpenEXR":
             msg += f"\n{_SLOT}second layer 'clipped' holds what the stock clamp would have deleted"
+        if write_metadata:
+            cs_note = colorspace_note.strip()
+            cs_transfer, cs_primaries = _COLORSPACES.get(colorspace,
+                                                         _COLORSPACES["unspecified"])
+            cs_label = f"{colorspace} - {cs_note}" if cs_note else colorspace
+            msg += (f"\n{_SLOT}colorspace: {cs_label} | transfer: {cs_transfer} | "
+                    f"primaries: {cs_primaries}")
+        else:
+            msg += f"\n{_SLOT}colorspace: not written (write_metadata off)"
         logger.info("[vae_float32] %s", msg.replace("\n", " "))
         return {"ui": {"text": [msg]}, "result": (folder,)}
 

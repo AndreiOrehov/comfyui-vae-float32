@@ -1,5 +1,23 @@
 # Changelog
 
+## 1.3.1 - the EXR says what colour it is
+
+`ANDRO Save EXR` gains `colorspace` and `colorspace_note`. Until now the file was silent about its own
+encoding, and an untagged EXR is read as **linear** by every compositor that opens it - which for a decoded
+SDR frame is wrong, because what a VAE returns is display-referred sRGB/Rec.709 gamma.
+
+The default is therefore `srgb_display`, the truth for SD, Flux, Wan and LTX SDR decodes. The exceptions are
+named in the tooltip: LTX-2.5 HDR decodes are `acescct`, the LTX-2.3 HDR IC-LoRA is `logc3`. Also available:
+`rec709_display`, `linear_rec709`, `acescg`, `aces2065_1`, `unspecified`.
+
+The header now carries `andro/colorspace`, `andro/transfer`, `andro/primaries` and - for every known gamut -
+the **standard OpenEXR `chromaticities` attribute**, so a reader can act on it instead of guessing. The node's
+report states the encoding it wrote.
+
+**Nothing converts.** The pixels are bit-identical to 1.3.0 (verified: max abs diff 0.0 on a round-trip);
+Nuke or Resolve must still be told the same colourspace on input. New widgets are appended last, so saved
+graphs keep their widget values.
+
 ## 1.3.0 - the pack gets a name, and the measurements get opinions
 
 ### Every node renamed, and why your old graphs still work
